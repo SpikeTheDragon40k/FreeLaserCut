@@ -264,19 +264,23 @@ from freelasercut.ui.main_window import MainWindow  # noqa: E402
 w = MainWindow()
 w.resize(1400, 900)
 ed = w.editor
-check("senza codice: Stampa e taglia è nascosto e non si apre", not w.acts["print_cut"].isVisible()
-      and w.print_cut_dialog() is None)
+check("0.19.5: anche senza codice Stampa e taglia si vede (non è più in prova), il Rilievo 3D no",
+      w.acts["print_cut"].isVisible() and not w.acts["relief"].isVisible() and "in prova" not in w.acts["print_cut"].text())
 pal = getattr(getattr(w, "banco", None), "palette", None)
 if pal is not None:
-    check("Banco: senza codice la ricerca dei comandi non lo trova",
-          w.acts["print_cut"] not in (pal.collect(), [a_ for a_, _p in pal.entries])[1])
-check("con il codice: compare in Strumenti, insieme al Rilievo 3D", w.admin_dialog(code="prova") is True
-      and w.acts["print_cut"].isVisible() and w.acts["relief"].isVisible())
-if pal is not None:
-    check("Banco: con il codice la ricerca lo trova",
+    check("Banco: senza codice la ricerca dei comandi lo trova",
           w.acts["print_cut"] in (pal.collect(), [a_ for a_, _p in pal.entries])[1])
+check("con il codice: c'è sempre, insieme al Rilievo 3D", w.admin_dialog(code="prova") is True
+      and w.acts["print_cut"].isVisible() and w.acts["relief"].isVisible())
 dlg = w.print_cut_dialog()
 check("la finestra si apre, e una seconda richiesta riporta la stessa", dlg is not None and w.print_cut_dialog() is dlg)
+check("0.19.5: titolo senza «(in prova)»", "in prova" not in dlg.windowTitle(), dlg.windowTitle())
+check("0.19.5: lo stesso sistema della scheda Movimento: 8 frecce, Puntino e Lucciola al centro, passi con il 50",
+      len(dlg.pad.jog_buttons) == 8 and dlg.pad.b_dot.parent() is dlg.pad.center
+      and [x for x, _ in dlg.pad.steps] == [0.1, 1, 10, 50, 100])
+dlg.pad.set_mode("joystick")
+check("…e l'interruttore Frecce | Joystick", dlg.pad.mode() == "joystick" and dlg.pad.b_dot.parent() is dlg.pad.page_joy)
+dlg.pad.set_mode("arrows")
 check("piano vuoto: niente crocette, con il motivo", dlg.add_marks() is False and "vuoto" in dlg.msg.text()
       and not dlg.b_pdf.isEnabled(), dlg.msg.text())
 cut = RectShape(80, 50)
@@ -347,7 +351,7 @@ SHEET = sheet(3.0, 60.0, 35.0, about=p1)  # il foglio vero: storto di 3° e spos
 h1 = head_to(mp(SHEET, p1))
 check("testa portata sulla crocetta 1 del foglio", near(h1, mp(SHEET, p1), 0.02), (h1, mp(SHEET, p1)))
 h0 = dlg.head()
-dlg.step.setCurrentIndex(1)
+dlg.pad.set_step(1)
 dlg.jog(1, 0)
 until(lambda: abs(dlg.head()[0] - h0[0] - 1.0) < 0.02, 5)
 check("frecce della finestra: 1 mm a destra", abs(dlg.head()[0] - h0[0] - 1.0) < 0.02 and abs(dlg.head()[1] - h0[1]) < 0.02,
@@ -356,8 +360,9 @@ head_to(mp(SHEET, p1))
 dlg.refresh()
 check("crocetta 1 presa dalla posizione della testa", dlg.take(1) is True and near(dlg.pts[0], mp(SHEET, p1), 0.02)
       and not dlg.b_align.isEnabled(), dlg.msg.text())
-dlg.b_dot.setChecked(True)
-check("puntino acceso dalla finestra", until(lambda: w.ctl.fire_active, 3))
+dlg.pad.b_glow.click()
+check("Lucciola accesa dalla finestra (la stessa della scheda Laser)", until(lambda: w.ctl.fire_active, 3)
+      and w.laser._glow_on)
 head_to(mp(SHEET, p2))
 dlg.refresh()
 check("crocetta 2 presa", dlg.take(2) is True and near(dlg.pts[1], mp(SHEET, p2), 0.02) and dlg.b_align.isEnabled())
@@ -367,7 +372,8 @@ if i_cur >= 0:
 n_undo = len(ed.undo_stack)
 res = dlg.align()
 check("allineamento: ruotato di 3,00°", bool(res) and abs(res["angle"] - 3.0) < 0.02, dlg.msg.text())
-check("…il puntino si spegne da solo", until(lambda: not w.ctl.fire_active, 3) and not dlg.b_dot.isChecked())
+check("…la Lucciola si spegne da sola", until(lambda: not w.ctl.fire_active, 3) and not dlg.pad.b_glow.isChecked()
+      and not w.laser._glow_on)
 got = [mp(the_cut().tf, c) for c in ((0, 0), (80, 0), (80, 50), (0, 50))]
 want = [mp(SHEET, c) for c in corners0]
 err = max(math.dist(g, t) for g, t in zip(got, want))
@@ -423,10 +429,10 @@ check("foglio che porterebbe il taglio fuori dal piano: rifiutato, il disegno no
 dlg.take(1, (50.0, 50.0))
 dlg.take(2, (50.0, 50.0))
 check("stesso punto per le due crocette: rifiutato", dlg.align() is False and "coincidono" in dlg.msg.text())
-dlg.b_dot.setChecked(True)
+dlg.pad.b_glow.click()
 until(lambda: w.ctl.fire_active, 3)
 dlg.close()
-check("chiudendo la finestra il puntino si spegne", until(lambda: not w.ctl.fire_active, 3))
+check("chiudendo la finestra la Lucciola si spegne", until(lambda: not w.ctl.fire_active, 3) and not w.laser._glow_on)
 w.ctl.disconnect_port()
 
 # ================================================================== 6. traduzioni

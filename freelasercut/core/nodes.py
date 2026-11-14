@@ -10,6 +10,8 @@ import math
 
 from PySide6.QtGui import QPainterPath
 
+from freelasercut.i18n import tr  # noqa: E402
+
 
 class Node:
     __slots__ = ("x", "y", "cin", "cout", "smooth")
@@ -336,6 +338,61 @@ def join_endpoints(subs, tol=0.05):
             if changed:
                 break
     return subs
+
+
+def is_open_end(subs, si, ni):
+    """True se il nodo ni del sottopercorso si è un estremo di un sottopercorso aperto (il primo o l'ultimo)."""
+    if not (0 <= si < len(subs)):
+        return False
+    sp = subs[si]
+    return not sp.closed and len(sp.nodes) >= 2 and ni in (0, len(sp.nodes) - 1)
+
+
+def join_two(subs, a, b, mode="merge"):
+    """0.19.5: unisce due estremi aperti a=(si, ni) e b=(si, ni) della stessa lista di sottopercorsi.
+    mode "merge" = li fonde in un punto solo a metà strada; "connect" = li collega con un tratto dritto lasciandoli
+    dove sono. Se sono i due estremi della stessa linea, la chiude. -> None se fatto, altrimenti il motivo (testo)."""
+    if a == b:
+        return tr("Scegli due nodi diversi")
+    if not (is_open_end(subs, *a) and is_open_end(subs, *b)):
+        return tr("Si possono unire solo due estremi di linee aperte")
+    (sa_i, na), (sb_i, nb) = a, b
+    if sa_i == sb_i:  # i due estremi della stessa linea: la chiude
+        sp = subs[sa_i]
+        if len(sp.nodes) < (4 if mode == "merge" else 3):
+            return tr("La linea ha troppo pochi nodi: chiudendola non resterebbe una forma")
+        first, last = sp.nodes[0], sp.nodes[-1]
+        if mode == "merge":
+            m = ((first.x + last.x) / 2, (first.y + last.y) / 2)
+            first.move(m[0] - first.x, m[1] - first.y)
+            last.move(m[0] - last.x, m[1] - last.y)
+            sp.nodes.pop()
+            first.cin = last.cin
+            first.smooth = False
+        else:
+            first.cin = None
+            last.cout = None
+        sp.closed = True
+        return None
+    sa, sb = subs[sa_i], subs[sb_i]
+    if na == 0:  # la fine di a e l'inizio di b diventano il punto in comune
+        reverse(sa)
+    if nb != 0:
+        reverse(sb)
+    ea, sbn = sa.nodes[-1], sb.nodes[0]
+    if mode == "merge":
+        m = ((ea.x + sbn.x) / 2, (ea.y + sbn.y) / 2)
+        ea.move(m[0] - ea.x, m[1] - ea.y)
+        sbn.move(m[0] - sbn.x, m[1] - sbn.y)
+        ea.cout = sbn.cout
+        ea.smooth = False
+        sa.nodes.extend(sb.nodes[1:])
+    else:
+        ea.cout = None
+        sbn.cin = None
+        sa.nodes.extend(sb.nodes)
+    subs.remove(sb)
+    return None
 
 
 def close_subpaths(subs, tol=0.5):

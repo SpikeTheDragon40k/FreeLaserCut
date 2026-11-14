@@ -227,12 +227,12 @@ HELP = {
         "computer, mai la rete, e accetta disegni solo dal sito di MakerHub; il laser non parte mai da solo e ogni "
         "disegno arrivato si toglie con Ctrl+Z. Senza la spunta i disegni si scaricano dal sito e si portano qui "
         "con File → Importa."), None),
-    "print_cut": (tr("Stampa e taglia (in prova)"), tr(
+    "print_cut": (tr("Stampa e taglia"), tr(
         "Per tagliare attorno a qualcosa di già stampato, come adesivi ed etichette. FreeLaserCut mette due crocette "
-        "accanto al disegno e salva il PDF da stampare al 100%. Poi fissi il foglio sul piano, porti la testa con il "
-        "puntino sul centro delle due crocette e il disegno si sposta sopra il foglio vero, anche se è storto. Si "
-        "stampa quello che sta sui livelli con l'uscita spenta; si taglia quello che ha l'uscita accesa. Mai su "
-        "vinile o PVC."), None),
+        "accanto al disegno e salva il PDF da stampare al 100%. Poi fissi il foglio sul piano, porti la testa sul "
+        "centro delle due crocette con le frecce o il joystick e il Puntino o la Lucciola (come nella scheda "
+        "Movimento), e il disegno si sposta sopra il foglio vero, anche se è storto. Si stampa quello che sta sui "
+        "livelli con l'uscita spenta; si taglia quello che ha l'uscita accesa. Mai su vinile o PVC."), None),
     "admin_code": (tr("Funzioni in prova"), tr("Sblocca con il codice amministratore le funzioni ancora in prova, "
                                                "oppure le nasconde di nuovo."), None),
     "autofocus": (tr("Asse Z e autofocus"), tr("Per le macchine con l'asse Z motorizzato. Con una sonda collegata "
@@ -349,9 +349,22 @@ HELP = {
                     [(tr("Da sinistra a destra"), tr("prende solo ciò che è tutto dentro")),
                      (tr("Da destra a sinistra"), tr("prende anche ciò che tocca")),
                      (tr("Maiusc / Ctrl"), "aggiunge / alterna")]),
-    "tool:nodes": (tr("Modifica nodi (N)"), tr("Sposta nodi e maniglie delle curve."),
-                   [("D", "elimina nodo"), ("C / S", "angolo / morbido"), ("B", "spezza"), ("L", "raddrizza"),
-                    ("M", tr("nodo nel punto medio")), ("A", tr("arrotonda lo spigolo (raccordo)"))]),
+    "tool:nodes": (tr("Modifica nodi (N)"), tr("Sposta nodi e maniglie delle curve. Si vedono i nodi di tutte le forme "
+                   "selezionate; le maniglie compaiono quando il nodo selezionato è uno solo."),
+                   [(tr("Ctrl+clic / Maiusc+clic"), tr("aggiunge o toglie un nodo dalla selezione")),
+                    (tr("trascina sul vuoto"), tr("seleziona i nodi dentro il rettangolo")),
+                    ("Ctrl+A", tr("tutti i nodi")), ("Esc", tr("toglie la selezione dei nodi (di nuovo: torna a Selezione)")),
+                    ("D", tr("elimina i nodi selezionati")), ("C / S", tr("angolo / morbido")), ("B", tr("spezza")),
+                    ("L", tr("raddrizza")), ("M", tr("nodo nel punto medio")), ("A", tr("arrotonda lo spigolo (raccordo)")),
+                    ("J", tr("unisce due estremi selezionati in un punto solo, a metà strada")),
+                    (tr("Maiusc+J"), tr("collega due estremi selezionati con un tratto dritto")),
+                    (tr("Ctrl+clic su un'altra forma"), tr("la aggiunge: si possono collegare due tracciati"))]),
+    "node_join": (tr("Unisci nodi"), tr("Con lo strumento Nodi e due estremi di linee aperte selezionati: li fonde in un "
+                  "punto solo a metà strada (tasto J). Se sono i due estremi della stessa linea, la chiude; se sono di due "
+                  "forme, diventano una forma sola sul livello del primo nodo selezionato."), None),
+    "node_connect": (tr("Collega nodi"), tr("Con lo strumento Nodi e due estremi di linee aperte selezionati: li collega "
+                     "con un tratto dritto e li lascia dove sono (Maiusc+J). Due forme diverse diventano una sola, sul "
+                     "livello del primo nodo selezionato."), None),
     "tool:trim": (tr("Forbici (X)"), tr("Toglie le eccedenze dove le linee si incrociano: passando sopra una linea si colora "
                   "di rosso il tratto fra i due incroci più vicini (o fino all'estremo), clic = lo togli. Le curve restano "
                   "curve. Una linea senza incroci si toglie tutta. Ogni clic si annulla con Ctrl+Z."),

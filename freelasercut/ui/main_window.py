@@ -247,6 +247,10 @@ class MainWindow(QMainWindow):
                           "oppure la foto diventa linee e riempimenti")),
             "close_paths": A(tr("Chiudi tracciati…"), self.close_paths_dialog, None, "close_path"),
             "join": A(tr("Unisci estremi"), e.auto_join, "Alt+J", "join"),
+            # 0.19.5: i tasti J e Maiusc+J li gestisce lo strumento Nodi; qui solo scritti accanto alla voce del menu
+            "node_join": A(tr("Unisci nodi") + "\tJ", lambda: self._node_join("merge"), None, "join"),
+            "node_connect": A(tr("Collega nodi") + "\t" + tr("Maiusc+J"), lambda: self._node_join("connect"), None,
+                              "join"),
             "break": A(tr("Scomponi"), e.break_apart, "Alt+B", "break"),
             "reverse": A(tr("Inverti direzione di taglio"), e.reverse),
             "duplicates": A(tr("Elimina duplicati"), e.delete_duplicates, "Alt+D", "duplicates"),
@@ -319,7 +323,7 @@ class MainWindow(QMainWindow):
             "relief": A(tr("Rilievo 3D su tavola (in prova)…"), self.relief_dialog, None, "sculpt",
                         tr("Scolpisce la tavola intera a strati, a testa ferma, da un'immagine in grigi o da un modello "
                            "3D, con il test di profondità obbligatorio")),
-            "print_cut": A(tr("Stampa e taglia (in prova)…"), self.print_cut_dialog, None, "frame",
+            "print_cut": A(tr("Stampa e taglia…"), self.print_cut_dialog, None, "frame",
                            tr("Taglia attorno a qualcosa di già stampato: due crocette stampate con il disegno dicono "
                               "al laser dove sta il foglio")),
             "makerhub_site": A(tr("Strumenti MakerHub"), self.makerhub_open, None, None,
@@ -970,6 +974,7 @@ class MainWindow(QMainWindow):
         self.laser.inv_x.toggled.connect(lambda on: self.set_axis_inverted("x", on))
         self.laser.inv_y.toggled.connect(lambda on: self.set_axis_inverted("y", on))
         self.move = MovePanel(self.ctl, self.qs, lambda: self.profile, self.canvas.head_pos)
+        self.move.pad.attach_laser(self.laser)  # 0.19.5: Puntino e Lucciola al centro delle frecce
         self.machine = MachinePanel(self.ctl, self.profile, self.on_profile)
         self.camera = CameraPanel(self.ctl, self)
         self.console = ConsolePanel(self.ctl)
@@ -2222,6 +2227,10 @@ class MainWindow(QMainWindow):
                 ed.select([hit])
             elif hit is None and ed.selection and not ops.union_bounds(ed.selection).adjusted(-1, -1, 1, 1).contains(bed):
                 ed.select([])  # clic nel vuoto, lontano dalla selezione: menu del piano
+        nt = cv.tools.get("nodes")
+        if cv.tool is nt and nt is not None and nt.items:
+            # 0.19.5: strumento Nodi: prima le voci dei nodi (la selezione delle forme resta quella dello strumento)
+            return ["node_join", "node_connect", "-", "undo", "redo", "-", "fit_sel"]
         sel = ed.selection
         if not sel:
             return ["paste", "paste_in_place", "-", "undo", "redo", "-", "select_all", "-", "import", "-", "fit"]
@@ -2240,6 +2249,15 @@ class MainWindow(QMainWindow):
         keys += ["-", "to_path", "offset", "-", "fit_sel"]
         return keys
 
+    def _node_join(self, mode):
+        """Voci «Unisci nodi» / «Collega nodi»: passano allo strumento Nodi (servono due estremi selezionati)."""
+        nt = self.canvas.tools.get("nodes")
+        if nt is None or self.canvas.tool is not nt:
+            self.statusBar().showMessage(tr("Unisci nodi: usa lo strumento Nodi (N) e seleziona due estremi"), 5000)
+            return
+        nt.join_selected(mode)
+        self.canvas.viewport().update()
+
     def open_context_menu(self, view_pt, global_pt):
         if self.banco is not None:
             return None
@@ -2255,8 +2273,8 @@ class MainWindow(QMainWindow):
         from .. import admin
 
         self.acts["relief"].setVisible(admin.unlocked(self.qs))
-        self.acts["print_cut"].setVisible(admin.unlocked(self.qs))
         # 0.19.2: MakerHub non è più fra le funzioni in prova: le sue voci si vedono sempre
+        # 0.19.5: nemmeno Stampa e taglia (resta in prova solo il Rilievo 3D)
 
     def admin_dialog(self, *_, code=None):
         """Impostazioni → Funzioni in prova: il codice amministratore le sblocca (o le nasconde di nuovo)."""
@@ -2453,12 +2471,8 @@ class MainWindow(QMainWindow):
         QApplication.alert(self)  # se il sistema non lascia venire avanti la finestra, almeno lampeggia
 
     def print_cut_dialog(self, *_):
-        """Strumenti → Stampa e taglia (0.18.5, solo con le funzioni in prova sbloccate). La finestra resta aperta
-        accanto al piano: si continua a disegnare e a muovere la testa."""
-        from .. import admin
-
-        if not admin.unlocked(self.qs):
-            return None
+        """Strumenti → Stampa e taglia (0.18.5; per tutti dalla 0.19.5). La finestra resta aperta accanto al piano: si
+        continua a disegnare e a muovere la testa."""
         if getattr(self, "_print_cut_dlg", None) is not None:
             self._print_cut_dlg.raise_()
             self._print_cut_dlg.activateWindow()
@@ -3861,7 +3875,16 @@ class MainWindow(QMainWindow):
         SupportDialog(self).exec()
 
     def show_shortcuts(self):
-        QMessageBox.information(self, tr("Scorciatoie da tastiera"), SHORTCUTS)
+        """0.19.5: una finestra con l'elenco ordinato (una scorciatoia per riga, tasto in grassetto) e la ricerca."""
+        from .shortcuts import ShortcutsDialog
+
+        dlg = getattr(self, "_shortcuts_dlg", None)
+        if dlg is None:
+            dlg = self._shortcuts_dlg = ShortcutsDialog(self)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
+        return dlg
 
     def show_about(self):
         QMessageBox.about(self, tr("FreeLaserCut"), tr("<h3>FreeLaserCut (FLC) {0}</h3>Software libero di incisione laser per macchine GRBL, con profilo nativo per il Longer B1 40W.<br>Di fringuello79 · licenza GNU GPL 3.0 o successiva · nessuna garanzia.<br>Ti è utile? Puoi sostenerne lo sviluppo da <i>Aiuto → Sostieni FreeLaserCut</i>.<br><br>Caratteri Inter e JetBrains Mono (SIL OFL) · icone Lucide (ISC) · font a linea singola Hershey.", __version__)
@@ -3958,46 +3981,7 @@ def _hms(sec):
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
-SHORTCUTS = tr("""STRUMENTI
-V selezione · N nodi · L linee/curve · R rettangolo · E ellisse · P poligono · S stella · F forme (galleria) · T testo
-M misura · Q posiziona laser · Ctrl+Alt+N forma con misure esatte · Esc torna alla selezione
-F9 aggancio agli oggetti sì/no · Maiusc+F9 aggancio alla griglia · Alt (tenuto premuto) lo sospende
 
-SULLA TELA
-Rotella zoom · Spazio+trascina o tasto centrale: sposta la vista · Ctrl+0 adatta al piano
-Frecce: sposta di 1 mm (Maiusc 10, Ctrl 0,1) · senza selezione: jog della testa
-Maiusc: proporzioni / angoli a 15° / asse · Ctrl: dal centro · Alt: niente aggancio
-Trascina da sinistra a destra: seleziona ciò che è dentro · da destra a sinistra: anche ciò che tocca
-
-NODI
-Doppio clic su un segmento: nuovo nodo · D elimina · C angolo · S morbido · B spezza · I inserisci · M punto medio · L raddrizza · A arrotonda lo spigolo
-Trascina un segmento dritto per curvarlo · rilascia un estremo su un altro per unirli
-
-MODIFICA
-Ctrl+Z / Ctrl+Y annulla/ripeti · Ctrl+D duplica · Ctrl+G raggruppa · Ctrl+U separa · Ctrl+W salda
-Alt+O offset · Alt+A serie a griglia · Alt+B scomponi · Alt+J unisci estremi · . , ruota di 90°
-Alt+T vettorizza l'immagine selezionata
-
-MATERIALI
-Ctrl+M libreria materiali (applica al livello selezionato) · Laser → Test materiale
-
-LIVELLI
-Doppio clic su nome, modalità, velocità, potenza o passate per modificarli nella tabella · tasto destro: altre opzioni
-
-GUIDA
-Maiusc+F1 (o il pulsante ? in alto a destra): passa il mouse su un comando per leggerne descrizione e opzioni · Esc esce
-
-LASER
-Ctrl+Invio avvia · Ctrl+Spazio pausa · Ctrl+Pausa o Maiusc+Esc stop · Ctrl+Maiusc+F contorno · Ctrl+Maiusc+K verifica · Alt+P anteprima
-Laser → Riconosci la macchina: porte USB, driver e profilo adattato alla scheda collegata
-
-ANTEPRIMA
-Rotella zoom verso il cursore · trascina per spostare · doppio clic o 0 adatta alla finestra""") + "\n\n" + tr("""DISPONI
-Alt+N ottimizza lo spazio (nesting): i pezzi si sistemano sul materiale con il minimo spreco""") + "\n\n" + tr("""INTERFACCIA BANCO
-Ctrl+F o F3 cerca un comando · Ctrl+Maiusc+W apre/chiude l'Officina · tasto destro sul piano: menu radiale
-Durante l'incisione: Pausa e Stop restano sempre nello stesso posto, in basso al centro""") + "\n\n" + tr("""PIANI DI LAVORO
-Ctrl+PagSu / Ctrl+PagGiù piano precedente / successivo · Ctrl+Maiusc+N nuovo piano · Ctrl+Maiusc+O vista d'insieme
-Linguette in alto a sinistra sul bordo del piano: doppio clic rinomina · tasto destro: sposta qui la selezione, duplica, elimina""")
 
 
 def main(app=None, splash=None):

@@ -452,10 +452,14 @@ class RemoteServer:
         fn = getattr(self.win, "material_ratio", None)
         return fn() if fn is not None else None
 
+    def _material_model(self):
+        prof = getattr(self.win, "profile", None)
+        return getattr(prof, "model", None)
+
     def c_list_materials(self, query=""):
         q = query.lower().split()
         out = []
-        for m in materials.library(self._material_ratio()):
+        for m in materials.library(self._material_ratio(), self._material_model()):
             hay = f"{m.name} {m.operation} {m.thickness:g}".lower()
             if all(t in hay for t in q):
                 out.append({"name": m.name, "operation": m.operation, "thickness_mm": m.thickness, "power_pct": m.power,
@@ -464,7 +468,8 @@ class RemoteServer:
         return out
 
     def c_apply_material(self, layer, name, operation=None, thickness_mm=None):
-        cands = [m for m in materials.library(self._material_ratio()) if name.lower() in m.name.lower()
+        lib = materials.library(self._material_ratio(), self._material_model())
+        cands = [m for m in lib if name.lower() in m.name.lower()
                  and (operation is None or m.operation == operation)
                  and (thickness_mm is None or abs(m.thickness - float(thickness_mm)) < 0.01)]
         if not cands:

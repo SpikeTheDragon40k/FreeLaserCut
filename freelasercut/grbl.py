@@ -414,7 +414,7 @@ class GrblController(QObject):
                     to_send.append(cmd)
             for cmd in to_send:
                 self._write_raw((cmd.line + "\n").encode())
-                if cmd.tag != "job":
+                if cmd.tag not in ("job", "joy"):  # 0.19.5: i pezzetti del joystick non riempiono la console
                     self.line_sent.emit(_mask(cmd.line))  # console, registro, comando a distanza: mai la password
 
     def realtime(self, byte):
@@ -453,7 +453,7 @@ class GrblController(QObject):
     def resume(self):
         self.realtime(b"~")
 
-    def jog(self, dx=0.0, dy=0.0, feed=3000):
+    def jog(self, dx=0.0, dy=0.0, feed=3000, tag=None):
         sx, sy = self.axis_sign  # assi invertiti nel profilo: «su» sul piano resta «su» per la testa
         k = int(self.axis_rot or 0) % 4
         if k == 1:  # piano ruotato (0.19.3): lo spostamento sul piano, visto dalla macchina (come profile.frame_delta)
@@ -469,14 +469,24 @@ class GrblController(QObject):
         if dy:
             parts.append(f"Y{dy:.3f}")
         if parts:
-            self.send_line(f"$J=G91 G21 {' '.join(parts)} F{feed:.0f}")
+            self.send_line(f"$J=G91 G21 {' '.join(parts)} F{feed:.0f}", tag=tag)
 
     def jog_to(self, x, y, feed=6000):
         """Va a una posizione assoluta di lavoro (doppio clic sul piano)."""
         self.send_line(f"$J=G90 G21 X{x:.3f} Y{y:.3f} F{feed:.0f}")
 
-    def jog_cancel(self):
+    def jog_cancel(self, tag=None):
+        """Ferma il jog. Con tag (0.19.5, joystick): prima toglie dalla coda i pezzetti di quel tag non ancora
+        mandati, così dopo l'arresto la testa non riparte."""
+        if tag is not None:
+            with self._lock:
+                self._pending = collections.deque(c for c in self._pending if c.tag != tag)
         self.realtime(0x85)
+
+    def queued(self, tag):
+        """Quanti comandi con questo tag sono in coda o mandati e in attesa dell'«ok» della scheda."""
+        with self._lock:
+            return sum(1 for c in self._pending if c.tag == tag) + sum(1 for c in self._inflight if c.tag == tag)
 
     def set_work_origin(self):
         self.send_line("G10 L20 P1 X0 Y0")
@@ -929,7 +939,7 @@ class GrblController(QObject):
             self.last_reply = time.time()
             with self._lock:
                 head = self._inflight.popleft() if self._inflight else None
-            if head is not None and head.tag != "job":
+            if head is not None and head.tag != "job" and (head.tag != "joy" or not is_ok):
                 self.line_received.emit(line)
             if is_err:
                 code = _code(line)

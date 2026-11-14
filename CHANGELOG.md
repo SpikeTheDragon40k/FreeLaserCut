@@ -1,5 +1,30 @@
 # Novità di FreeLaserCut
 
+## 0.19.5 — 14/11/2026
+Nodi, movimento della testa con il joystick, Stampa e taglia per tutti.
+
+**Strumento Nodi: più nodi insieme e unione di due nodi.**
+- Si vedono i nodi di **tutte le forme selezionate**, non solo della prima.
+- **Più nodi selezionati:** Ctrl+clic (o Maiusc+clic) aggiunge o toglie un nodo, un rettangolo trascinato sul vuoto prende i nodi dentro, Ctrl+A li prende tutti, Esc toglie la scelta (di nuovo Esc: torna a Selezione). Spostamento, elimina (D) e morbido/angolo (S, C) valgono per tutti i nodi selezionati, con un solo Annulla. Le maniglie si vedono quando il nodo selezionato è uno.
+- **Unire due nodi:** selezionati due estremi di linee aperte, **J** li fonde in un punto solo a metà strada, **Maiusc+J** li collega con un tratto dritto lasciandoli dove sono. Se sono i due estremi della stessa linea, la chiude; se sono di due forme, diventano una forma sola sul livello del primo nodo selezionato. Anche nel menu del tasto destro (*Unisci nodi*, *Collega nodi*). Con nodi che non sono estremi aperti non fa niente e lo dice.
+- Con una forma e un nodo solo tutto resta come prima (trascinare un estremo sull'altro li unisce ancora; *Unisci estremi*, Alt+J, invariato).
+
+**Scheda Movimento: Puntino e Lucciola al centro delle frecce, e il joystick.**
+- Al centro della croce delle frecce ci sono **Puntino** (tieni premuto) e **Lucciola** (resta accesa): sono gli stessi della scheda Laser, con la stessa potenza, gli stessi avvisi e lo stesso spegnimento automatico. *Vai a X0 Y0*, che stava al centro, è passato nella colonna di destra. Frecce e passi restano come prima. Anche nel Banco.
+- **Joystick virtuale:** sotto le frecce l'interruttore *Frecce | Joystick*. Tieni premuta la manopola e trascinala: la testa va in quella direzione, più veloce più la allontani dal centro (fino alla *Velocità jog*), e si ferma quando la lasci. Al centro c'è una piccola zona morta. Sulla scheda sono tanti piccoli spostamenti (al massimo due in attesa), tagliati al bordo dell'area; la testa si ferma anche con Esc, se FreeLaserCut perde il primo piano o se la macchina non è più pronta. Provato sul simulatore, non ancora su un laser vero: via Wi-Fi può rispondere meno pronto che via USB.
+
+**Stampa e taglia per tutti** (prima era fra le funzioni in prova, dietro il codice): nel menu *Strumenti*. Per portare la testa sulle crocette ora ha lo stesso sistema della scheda Movimento, con i passi fino a 50 mm, Puntino e Lucciola al centro e il joystick. Il Rilievo 3D resta in prova.
+
+**Nesting manuale: la finestra si nota.** Si apre sopra i pannelli di destra ma ne sporge un po' a sinistra, sul piano, invece di stare tutta sopra i pannelli e confondersi con loro.
+
+**Aiuto → Scorciatoie da tastiera rifatto:** una finestra con la ricerca, una scorciatoia per riga con il tasto in grassetto, sezioni con un titolo. Ci sono anche i tasti nuovi dei nodi e quelli per muovere la testa.
+
+**Sculpfun E1:**
+- riconosciuta dalla scritta che manda la scheda («Sculpfun E1», letta nel firmware ufficiale 1.0.5), anche se l'area di lavoro non torna (in quel caso avvisa di controllare $130 e $131);
+- con una E1 la *Libreria materiali* usa la **tabella ufficiale Sculpfun** della E1 (incisioni e tagli per 12 W, Pro 21 W e infrarosso) al posto della stima dalla tabella Longer: valori di partenza, non provati con FreeLaserCut.
+
+**Riconosci la macchina → Applica** non perde più le scelte fatte per la stessa macchina: angolo dello 0, assi provati con le frecce e piano ruotato restano com'erano.
+
 ## 0.19.4 — 14/11/2026
 Un modello nuovo nel catalogo.
 

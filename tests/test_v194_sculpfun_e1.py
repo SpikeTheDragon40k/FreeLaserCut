@@ -107,10 +107,12 @@ check("8 scheda che si dichiara Sculpfun con l'area dell'E1: «Sculpfun E1 12W»
       (i.vendor, i.model, i.confidence, texts))
 i = machines.identify(settings={**BOARD, **{130: "320.000", 131: "400.000"}}, **brand)
 check("8 …anche con X e Y scambiati (320 × 400)", i.model == E12 and list(i.candidates) == list(E1), (i.model, i.candidates))
-i = machines.identify(settings={**BOARD, **{130: "410.000", 131: "400.000"}}, **brand)
+# 0.19.5: una scheda che scrive «Sculpfun E1» è una E1 (test_v195_varie); qui una Sculpfun che dice solo la marca
+brand_s = dict(banner=["Grbl 1.1h ['$' for help]"], info=["[VER:1.1h.20230801:]", "[MSG:FW:SCULPFUN V2.1]"])
+i = machines.identify(settings={**BOARD, **{130: "410.000", 131: "400.000"}}, **brand_s)
 check("9 Sculpfun con 410 × 400: ancora S10 o S30, nessun E1",
       not i.model and set(i.candidates) == {"Sculpfun S10", "Sculpfun S30 / S30 Pro / S30 Pro Max"}, (i.model, i.candidates))
-i = machines.identify(settings={**BOARD, **{130: "150", 131: "130"}}, **brand)
+i = machines.identify(settings={**BOARD, **{130: "150", 131: "130"}}, **brand_s)
 check("9 Sculpfun con 150 × 130: ancora i due C1 da scegliere, nessun modello proposto da solo",
       not i.model and set(i.candidates) == {"Sculpfun C1 3W", "Sculpfun C1 6W"}, (i.model, i.candidates))
 i = machines.identify(settings={**BOARD, **{130: "400", 131: "300"}}, **plain)
@@ -158,7 +160,7 @@ check("13 …password e indirizzo della rete propria sono quelli della guida uff
       wifi_setup.OWN_NET_PASSWORD == "12345678" and wifi_setup.OWN_NET_IP == "192.168.4.1" and 8080 in wifi_setup.PORTS)
 
 # ------------------------------------------------------------------ traduzioni
-fam_note = next(t for _k, t in machines.identify(settings=BOARD, **brand).notes if "non si legge dalla scheda" in t)
+fam_note = next(t for _k, t in machines.identify(settings=BOARD, **brand_s).notes if "non si legge dalla scheda" in t)
 for lang in ("en", "es", "fr", "pt"):
     with open(os.path.join(ROOT, "freelasercut", "locale", f"{lang}.json"), encoding="utf-8") as fh:
         loc = json.load(fh)

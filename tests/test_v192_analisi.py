@@ -139,8 +139,11 @@ spin()
 check("A1 a comando spento (nessun lavoro) Maiusc+Esc non ferma niente e non dà errori", len(fired) == 2)
 cv.set_tool("select")
 stop.setEnabled(stop_was)
-check("A1 la guida delle scorciatoie dice i tasti veri", "Ctrl+Pausa o Maiusc+Esc stop" in open(
-    os.path.join(ROOT, "freelasercut", "ui", "main_window.py"), encoding="utf-8").read())
+# 0.19.5: l'elenco delle scorciatoie sta in ui/shortcuts.py, una riga per tasto
+from freelasercut.ui import shortcuts as _sc  # noqa: E402
+
+_rows = {k: d for _t, r in _sc.sections() for k, d, _a in r}
+check("A1 la guida delle scorciatoie dice i tasti veri", _rows.get("Ctrl+Pausa o Maiusc+Esc") == "Stop", _rows.get("Ctrl+Pausa o Maiusc+Esc"))
 
 # forme per le prove che seguono
 r1 = at(RectShape(120, 80, layer=1), 100, 100)

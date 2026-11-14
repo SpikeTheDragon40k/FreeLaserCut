@@ -99,9 +99,9 @@ def bar_items():
 
 # ================================================================== S1 / S2. senza il codice delle funzioni in prova
 check("S1 programma appena installato, senza codice: MakerHub c'è nel menu Strumenti (con «ricevi qui i disegni»), "
-      "mentre Rilievo 3D e Stampa e taglia restano nascosti",
+      "il Rilievo 3D resta nascosto e (0.19.5) Stampa e taglia si vede",
       not admin.unlocked(w.qs) and a["makerhub_site"].isVisible() and a["makerhub_receive"].isVisible()
-      and not a["relief"].isVisible() and not a["print_cut"].isVisible() and w.mh_link is None,
+      and not a["relief"].isVisible() and a["print_cut"].isVisible() and w.mh_link is None,
       (a["makerhub_site"].isVisible(), a["relief"].isVisible()))
 w.makerhub_open()
 check("S2 senza codice il comando apre il sito di MakerHub e accende la ricezione",
@@ -113,8 +113,8 @@ if UI == "classica":
     check("S1 …nella barra di sinistra il pulsante di MakerHub si vede, come il pulsante «Strumenti»",
           btn.isVisible() and bar.isVisible() and bar.widgetForAction(a["makerhub_site"]).isVisible())
     shown = [x for x in btn.menu().actions() if x.isVisible() and not x.isSeparator()]
-    check("M4 senza il codice il menu del pulsante non mostra Rilievo 3D né Stampa e taglia (sono in prova)",
-          a["relief"] not in shown and a["print_cut"] not in shown and len(shown) == 8, [x.text() for x in shown])
+    check("M4 senza il codice il menu del pulsante non mostra il Rilievo 3D (in prova); Stampa e taglia sì (0.19.5)",
+          a["relief"] not in shown and a["print_cut"] in shown and len(shown) == 9, [x.text() for x in shown])
 
 # ================================================================== M1. menu Strumenti, sbloccato
 check("(con il codice le funzioni in prova si sbloccano)", w.admin_dialog(code="prova") is True)
@@ -244,9 +244,9 @@ if pal is not None:
 w.makerhub_receive(True)
 hid = w.admin_dialog() is False
 until(lambda: False, 0.3)
-check("S6 nascondendo di nuovo le funzioni in prova spariscono solo Rilievo 3D e Stampa e taglia: MakerHub resta nel "
-      "menu e nella barra, e la ricezione resta accesa",
-      hid and site.isVisible() and rec.isVisible() and not a["relief"].isVisible() and not a["print_cut"].isVisible()
+check("S6 nascondendo di nuovo le funzioni in prova sparisce solo il Rilievo 3D (0.19.5: Stampa e taglia resta): "
+      "MakerHub resta nel menu e nella barra, e la ricezione resta accesa",
+      hid and site.isVisible() and rec.isVisible() and not a["relief"].isVisible() and a["print_cut"].isVisible()
       and (UI != "classica" or (btn.isVisible() and bar.widgetForAction(site).isVisible()))
       and w.mh_link.running() and rec.isChecked(), (site.isVisible(), a["relief"].isVisible(), w.mh_link.running()))
 w._makerhub_stop()
@@ -266,9 +266,10 @@ check("M8 guida «?»: scheda di «Strumenti MakerHub», con i quattro nomi, «e
       h is not None and h[0] == "Strumenti MakerHub" and all(n in h[1] for n in mh.TOOL_NAMES) and "esterno" in h[1]
       and "Manda a FreeLaserCut" in h[1], h)
 hr = help_texts.lookup("makerhub_receive")
-check("S7 le due schede di MakerHub non dicono più «(in prova)»; quelle di Rilievo 3D e Stampa e taglia sì",
+check("S7 le due schede di MakerHub e (0.19.5) Stampa e taglia non dicono più «(in prova)»; il Rilievo 3D sì",
       hr is not None and "(in prova)" not in h[0] and "(in prova)" not in hr[0]
-      and "(in prova)" in help_texts.lookup("relief")[0] and "in prova" in a["print_cut"].text(), (h[0], hr[0]))
+      and "(in prova)" in help_texts.lookup("relief")[0] and "in prova" not in a["print_cut"].text()
+      and "(in prova)" not in help_texts.lookup("print_cut")[0], (h[0], hr[0]))
 check("M8 …le schede delle quattro voci di prima non ci sono più; c'è quella del pulsante «Strumenti»",
       not any(help_texts.lookup(k) for k in OLD) and help_texts.lookup("tools_menu") is not None
       and btn.property("help_key") == "tools_menu" and site.property("help_key") == "makerhub_site")

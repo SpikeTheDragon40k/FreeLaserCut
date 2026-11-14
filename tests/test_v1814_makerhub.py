@@ -533,9 +533,9 @@ def searchable():
     return [a_ for a_, _p in pal.entries]
 
 
-check("0.19.2, senza codice: le voci di MakerHub si vedono (non sono più fra le funzioni in prova), Rilievo 3D e "
-      "Stampa e taglia no; finché nessuno le usa non si apre e non si ascolta niente",
-      all(w.acts[n].isVisible() for n in names) and not w.acts["relief"].isVisible() and not w.acts["print_cut"].isVisible()
+check("0.19.2, senza codice: le voci di MakerHub si vedono (non sono più fra le funzioni in prova), il Rilievo 3D "
+      "no (0.19.5: Stampa e taglia sì, per tutti); finché nessuno le usa non si apre e non si ascolta niente",
+      all(w.acts[n].isVisible() for n in names) and not w.acts["relief"].isVisible() and w.acts["print_cut"].isVisible()
       and not opened and (w.mh_link is None or not w.mh_link.running()) and "error" in talk([GET]))
 if pal is not None:
     check("Banco: senza codice la ricerca dei comandi trova le voci di MakerHub", all(w.acts[n] in searchable() for n in names))
@@ -738,10 +738,10 @@ check("con le funzioni in prova sbloccate si accettano anche gli strumenti apert
 check("in tutto questo il laser e la macchina non sono stati toccati", not w.ctl.job_active and not w.ctl.connected and not boxes)
 fresh()
 arr = link.read_payload(payload([("a.svg", svg())]))
-check("0.19.2, nascondendo di nuovo le funzioni in prova: spariscono Rilievo 3D e Stampa e taglia; MakerHub resta "
-      "visibile e la ricezione resta accesa",
+check("0.19.2, nascondendo di nuovo le funzioni in prova: sparisce il Rilievo 3D (0.19.5: Stampa e taglia resta); "
+      "MakerHub resta visibile e la ricezione resta accesa",
       w.admin_dialog() is False and all(w.acts[n].isVisible() for n in names) and not w.acts["relief"].isVisible()
-      and not w.acts["print_cut"].isVisible() and w.mh_link.running()
+      and w.acts["print_cut"].isVisible() and w.mh_link.running()
       and talk([GET]).get("data", b"").startswith(b"HTTP/1.1 200"))
 st, j = deliver([("da-disco.svg", svg())], origin="null")
 check("…senza il codice una pagina aperta dal disco non può mandare disegni (quello resta per chi prova gli strumenti)",

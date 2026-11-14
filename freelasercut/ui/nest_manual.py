@@ -466,12 +466,52 @@ class NestAreaPanel(QDialog):
         self._place()
         return self
 
+    def right_panels_left(self):
+        """Bordo sinistro (coordinate dello schermo) dei pannelli sul lato destro: i dock agganciati a destra e
+        visibili (classica) o la colonna di destra del Banco. None se non ce ne sono."""
+        main = self.main
+        xs = []
+        docks = getattr(main, "docks", {}) or {}
+        for d in docks.values():
+            try:
+                if (d.isVisible() and not d.isFloating()
+                        and main.dockWidgetArea(d) == Qt.RightDockWidgetArea and d.width() > 0):
+                    xs.append(d.mapToGlobal(d.rect().topLeft()).x())
+            except (RuntimeError, AttributeError):
+                continue
+        banco = getattr(main, "banco", None)
+        for name in ("officina", "props_card", "flow"):  # Banco: colonna di destra (percorso, proprietà, Officina)
+            wd = getattr(banco, name, None) if banco is not None else None
+            try:
+                if wd is not None and wd.isVisible() and wd.width() > 0 and not getattr(wd, "window_mode", False):
+                    xs.append(wd.mapToGlobal(wd.rect().topLeft()).x())
+            except RuntimeError:
+                continue
+        return min(xs) if xs else None
+
     def _place(self):
-        try:  # in alto a destra della finestra, fuori dal centro del piano
+        """0.19.5: la finestra copre i pannelli di destra e ne sporge a sinistra quanto la parola «Nesting» della sua
+        barra, così si nota sul piano senza coprirlo (prima stava tutta sopra i pannelli e si confondeva con loro)."""
+        try:
+            from PySide6.QtGui import QFontMetrics
+
             g = self.main.geometry()
-            self.move(g.right() - self.width() - 40, g.top() + 110)
+            scr = self.screen().availableGeometry() if self.screen() is not None else None
+            adv = QFontMetrics(self.font()).horizontalAdvance("Nesting")  # misura, non scritta: non si traduce
+            x = self.place_x(self.right_panels_left(), adv, self.width(), g.right(),
+                             None if scr is None else (scr.left(), scr.right()))
+            self.move(x, g.top() + 110)
         except RuntimeError:
             pass
+
+    @staticmethod
+    def place_x(left, adv, width, main_right, screen=None):
+        """x della finestra: bordo sinistro dei pannelli di destra meno la parola «Nesting» (adv) e 8 px; senza
+        pannelli, come prima (40 px dal bordo destro della finestra principale). Sempre dentro lo schermo."""
+        x = main_right - width - 40 if left is None else left - adv - 8
+        if screen is not None:
+            x = max(screen[0], min(x, screen[1] - width))
+        return x
 
     def _laser_off(self):
         self._homing = False

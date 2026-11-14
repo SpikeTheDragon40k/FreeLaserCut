@@ -375,20 +375,59 @@ class SelectTool(Tool):
 
 
 # ======================================================================= nodi
+class _NodeItem:
+    """Una forma che si sta modificando a nodi: la forma e i suoi sottopercorsi (coordinate del piano)."""
+    __slots__ = ("shape", "subs", "began")
+
+    def __init__(self, shape):
+        self.shape = shape
+        self.subs = nodes.from_path(shape.path())
+        self.began = False  # già trasformata in tracciato in questo passo di modifica
+
+
 class NodeTool(Tool):
+    """Modifica nodi. 0.19.5: i nodi di tutte le forme selezionate, più nodi selezionati insieme (Ctrl/Maiusc+clic,
+    rettangolo sul vuoto, Ctrl+A), spostamento/elimina/tipo su tutti, unione di due estremi (J fonde, Maiusc+J
+    collega). Riferimento di un nodo: (k, si, ni) = forma k di self.items, sottopercorso si, nodo ni.
+    `target`, `subs` e `sel_node` restano come prima e si riferiscono alla forma del nodo principale."""
     name = "nodes"
     label = tr("Modifica nodi")
 
     def __init__(self, cv):
         super().__init__(cv)
-        self.target = None
-        self.subs = []
-        self.drag = None  # (tipo, si, ni) tipo: node | in | out | seg
-        self.hover = None
-        self.hover_seg = None
-        self.sel_node = None
-        self.began = False
+        self.items = []
+        self.cur = 0  # forma del nodo principale (quella di target/subs)
+        self.sel = []  # nodi selezionati, in ordine; l'ultimo è il principale
+        self.drag = None  # (tipo, k, si, ni) tipo: node | in | out | seg ; per seg ni = (i, j, t)
+        self.hover = None  # (tipo, k, si, ni)
+        self.hover_seg = None  # (k, si, i, j, t, q)
+        self.band = None  # (inizio, fine) in coordinate vista: rettangolo per scegliere i nodi
+        self._band_add = False
         self._last = None
+        self._txn = False  # passo di modifica aperto (begin)
+
+    # ---- compatibilità: la forma e il nodo «principali»
+    @property
+    def target(self):
+        return self.items[self.cur].shape if 0 <= self.cur < len(self.items) else None
+
+    @property
+    def subs(self):
+        return self.items[self.cur].subs if 0 <= self.cur < len(self.items) else []
+
+    @property
+    def sel_node(self):
+        if self.sel and self.sel[-1][0] == self.cur:
+            return self.sel[-1][1:]
+        return None
+
+    @sel_node.setter
+    def sel_node(self, v):
+        self.sel = [] if v is None else [(self.cur,) + tuple(v)]
+
+    @property
+    def began(self):
+        return self._txn
 
     def cursor(self):
         return QCursor(Qt.ArrowCursor)
@@ -397,112 +436,180 @@ class NodeTool(Tool):
         self._load()
 
     def deactivate(self):
-        self.target = None
-        self.subs = []
+        self.items = []
+        self.sel = []
+        self.band = None
 
-    def _load(self):
-        sel = [s for s in self.ed.editable() if not isinstance(s, (ImageShape, GroupShape))]
-        self.target = sel[0] if sel else None
-        self.subs = nodes.from_path(self.target.path()) if self.target else []
-        self.sel_node = None
+    def _load(self, keep=False):
+        old_sel = [(self.items[k].shape.id, si, ni) for k, si, ni in self.sel] if keep else []
+        shapes = [s for s in self.ed.editable() if not isinstance(s, (ImageShape, GroupShape))]
+        self.items = [_NodeItem(s) for s in shapes]
+        self.cur = 0
+        by_id = {it.shape.id: k for k, it in enumerate(self.items)}
+        self.sel = [(by_id[i], si, ni) for i, si, ni in old_sel if i in by_id and self._valid((by_id[i], si, ni))]
+        if self.sel:
+            self.cur = self.sel[-1][0]
+        self.hover = self.hover_seg = None
 
-    def _ensure_path(self):
-        """Prima modifica: una forma parametrica diventa tracciato (in automatico, annullabile)."""
-        if self.began:
-            return
-        self.ed.begin(tr("Modifica nodi"))
-        self.began = True
-        if not isinstance(self.target, PathShape) or not self.target.tf.isIdentity():
-            new = PathShape(nodes.to_path(self.subs), layer=self.target.layer)
-            new.id = self.target.id
-            idx = self.ed.doc.shapes.index(self.target)
-            self.ed.doc.shapes[idx] = new
-            self.ed.selection = [new if s is self.target else s for s in self.ed.selection]
-            self.target = new
+    def _valid(self, ref):
+        k, si, ni = ref
+        return 0 <= k < len(self.items) and 0 <= si < len(self.items[k].subs) and 0 <= ni < len(self.items[k].subs[si].nodes)
 
-    def _push(self):
-        self.target.set_path(nodes.to_path(self.subs))
+    def _stale(self):
+        shapes = self.ed.doc.shapes
+        return not self.items or any(it.shape not in shapes for it in self.items)
+
+    def _node(self, ref):
+        k, si, ni = ref
+        return self.items[k].subs[si].nodes[ni]
+
+    # ---- passo di modifica (un solo Annulla per azione)
+    def _ensure_path(self, ks=None):
+        """Prima modifica: le forme toccate diventano tracciati (in automatico, annullabile)."""
+        if not self._txn:
+            self.ed.begin(tr("Modifica nodi"))
+            self._txn = True
+        for k in (range(len(self.items)) if ks is None else sorted(set(ks))):
+            it = self.items[k]
+            if it.began:
+                continue
+            it.began = True
+            s = it.shape
+            if not isinstance(s, PathShape) or not s.tf.isIdentity():
+                new = PathShape(nodes.to_path(it.subs), layer=s.layer)
+                new.id = s.id
+                idx = self.ed.doc.shapes.index(s)
+                self.ed.doc.shapes[idx] = new
+                self.ed.selection = [new if x is s else x for x in self.ed.selection]
+                it.shape = new
+
+    def _push(self, ks=None):
+        for k in (range(len(self.items)) if ks is None else sorted(set(ks))):
+            it = self.items[k]
+            if it.began:
+                it.shape.set_path(nodes.to_path(it.subs))
         self.ed.preview_changed()
 
     def _finish(self):
-        if self.began:
+        if self._txn:
             self.ed.commit()
-            self.began = False
-            self.subs = nodes.from_path(self.target.path())
+            self._txn = False
+            for it in self.items:
+                it.began = False
+                it.subs = nodes.from_path(it.shape.path())
+            self.sel = [r for r in self.sel if self._valid(r)]
 
+    # ---- ricerca sotto il mouse
     def _hit(self, view_pt, tf):
         best = None
-        for si, sp in enumerate(self.subs):
-            for ni, nd in enumerate(sp.nodes):
-                for kind, pt in (("in", nd.cin), ("out", nd.cout), ("node", nd.pt())):
-                    if pt is None:
-                        continue
-                    if kind != "node" and self.sel_node != (si, ni):
-                        continue
-                    v = tf.map(QPointF(*pt))
-                    d = math.hypot(v.x() - view_pt.x(), v.y() - view_pt.y())
-                    if d <= 7 and (best is None or d < best[0] or kind == "node" and best[1] != "node" and d <= best[0] + 1):
-                        best = (d, kind, si, ni)
+        single = self.sel[-1] if len(self.sel) == 1 else None
+        for k, it in enumerate(self.items):
+            for si, sp in enumerate(it.subs):
+                for ni, nd in enumerate(sp.nodes):
+                    for kind, pt in (("in", nd.cin), ("out", nd.cout), ("node", nd.pt())):
+                        if pt is None:
+                            continue
+                        if kind != "node" and single != (k, si, ni):
+                            continue
+                        v = tf.map(QPointF(*pt))
+                        d = math.hypot(v.x() - view_pt.x(), v.y() - view_pt.y())
+                        if d <= 7 and (best is None or d < best[0] or kind == "node" and best[1] != "node" and d <= best[0] + 1):
+                            best = (d, kind, k, si, ni)
         return best[1:] if best else None
 
     def _hit_seg(self, p):
         best = None
         tol = self.cv.px(6)
-        for si, sp in enumerate(self.subs):
-            for i, j in sp.segments():
-                t, d, q = nodes.nearest_on_segment(sp, i, j, (p.x(), p.y()))
-                if d <= tol and (best is None or d < best[0]):
-                    best = (d, si, i, j, t, q)
+        for k, it in enumerate(self.items):
+            for si, sp in enumerate(it.subs):
+                for i, j in sp.segments():
+                    t, d, q = nodes.nearest_on_segment(sp, i, j, (p.x(), p.y()))
+                    if d <= tol and (best is None or d < best[0]):
+                        best = (d, k, si, i, j, t, q)
         return best[1:] if best else None
 
+    # ---- mouse
     def press(self, e, p):
         if e.button() != Qt.LeftButton:
             return
+        shift, ctrl, _ = _mods(e)
+        add = shift or ctrl
         tf = self.cv.bed_to_view_tf()
-        if self.target is None or self.target not in self.ed.doc.shapes:
-            self._load()
-        h = self._hit(e.position(), tf) if self.target else None
+        if self._stale():
+            self._load(keep=True)
+        h = self._hit(e.position(), tf) if self.items else None
         if h:
-            kind, si, ni = h
+            kind, k, si, ni = h
+            ref = (k, si, ni)
             if kind == "node":
-                self.sel_node = (si, ni)
-            self.drag = (kind, si, ni)
+                if add:  # Ctrl/Maiusc+clic: aggiunge o toglie il nodo
+                    if ref in self.sel:
+                        self.sel.remove(ref)
+                        if self.sel:
+                            self.cur = self.sel[-1][0]
+                        self.drag = None
+                        return
+                    self.sel.append(ref)
+                elif ref not in self.sel:
+                    self.sel = [ref]
+                else:  # già selezionato: diventa il principale, si trascinano tutti
+                    self.sel.remove(ref)
+                    self.sel.append(ref)
+                self.cur = k
+            self.drag = (kind, k, si, ni)
             self._last = p
             return
-        seg = self._hit_seg(p) if self.target else None
+        seg = self._hit_seg(p) if self.items else None
         if seg:
-            si, i, j, t, q = seg
-            self.drag = ("seg", si, (i, j, t))
+            k, si, i, j, t, q = seg
+            self.cur = k
+            self.drag = ("seg", k, si, (i, j, t))
             self._last = p
             return
         s = self.cv.hit_shape(p)
         if s is not None and not isinstance(s, (ImageShape, GroupShape)):
-            self.ed.select([s])
-            self._load()
-        else:
-            self.sel_node = None
+            if add:  # aggiunge la forma a quelle che si modificano, i nodi scelti restano
+                self.ed.select([s], "add")
+                self._load(keep=True)
+            else:
+                self.ed.select([s])
+                self._load()
+            return
+        # vuoto: rettangolo per scegliere i nodi (senza movimento = deseleziona)
+        self.band = (e.position(), e.position())
+        self._band_add = add
 
     def move(self, e, p):
         shift, ctrl, alt = _mods(e)
+        if self.band is not None:
+            self.band = (self.band[0], e.position())
+            return
         if self.drag is None:
             tf = self.cv.bed_to_view_tf()
-            self.hover = self._hit(e.position(), tf) if self.target else None
-            self.hover_seg = None if self.hover else (self._hit_seg(p) if self.target else None)
+            self.hover = self._hit(e.position(), tf) if self.items else None
+            self.hover_seg = None if self.hover else (self._hit_seg(p) if self.items else None)
             self.cv.snap_hint = None
             return
-        self._ensure_path()
-        kind, si, ni = self.drag
-        sp = self.subs[si]
+        kind, k, si, ni = self.drag
         if kind == "node":
-            q = p if alt else self.cv.snap(p, frozenset({self.target.id}))
-            nd = sp.nodes[ni]
+            refs = list(self.sel) if (k, si, ni) in self.sel else [(k, si, ni)]
+            self._ensure_path([r[0] for r in refs])
+            nd = self._node((k, si, ni))
+            q = p if alt else self.cv.snap(p, frozenset(self.items[r[0]].shape.id for r in refs))
             if shift:  # vincola orizzontale/verticale rispetto al punto di partenza
                 if abs(q.x() - self._last.x()) > abs(q.y() - self._last.y()):
                     q = QPointF(q.x(), nd.y)
                 else:
                     q = QPointF(nd.x, q.y())
-            nd.move(q.x() - nd.x, q.y() - nd.y)
-        elif kind in ("in", "out"):
+            dx, dy = q.x() - nd.x, q.y() - nd.y
+            for r in refs:
+                self._node(r).move(dx, dy)
+            self._last = p
+            self._push([r[0] for r in refs])
+            return
+        self._ensure_path([k])
+        sp = self.items[k].subs[si]
+        if kind in ("in", "out"):
             nodes.move_handle(sp.nodes[ni], kind, p.x(), p.y())
         elif kind == "seg":
             i, j, t = ni
@@ -517,71 +624,179 @@ class NodeTool(Tool):
             b.cin = (b.cin[0] + dx * wb, b.cin[1] + dy * wb)
             a.smooth = b.smooth = False
         self._last = p
-        self._push()
+        self._push([k])
 
     def release(self, e, p):
-        if self.drag and self.drag[0] == "node" and self.began:
-            # rilascio di un estremo aperto su un altro estremo: unisce
-            nodes.join_endpoints(self.subs, self.cv.px(6))
-            self._push()
+        if self.band is not None:
+            a, b = self.band
+            self.band = None
+            r = QRectF(a, b).normalized()
+            if r.width() < 3 and r.height() < 3:
+                if not self._band_add:
+                    self.sel = []
+                return
+            tf = self.cv.bed_to_view_tf()
+            got = [(k, si, ni) for k, it in enumerate(self.items) for si, sp in enumerate(it.subs)
+                   for ni, nd in enumerate(sp.nodes) if r.contains(tf.map(QPointF(*nd.pt())))]
+            if self._band_add:
+                self.sel += [g for g in got if g not in self.sel]
+            else:
+                self.sel = got
+            if self.sel:
+                self.cur = self.sel[-1][0]
+            return
+        if self.drag and self.drag[0] == "node" and self._txn and len(self.sel) <= 1:
+            # rilascio di un estremo aperto su un altro estremo della stessa forma: unisce (come prima)
+            k = self.drag[1]
+            nodes.join_endpoints(self.items[k].subs, self.cv.px(6))
+            self._push([k])
         self.drag = None
         self._finish()
 
     def double_click(self, e, p):
-        seg = self._hit_seg(p) if self.target else None
+        seg = self._hit_seg(p) if self.items else None
         if seg:
-            si, i, j, t, q = seg
-            self._ensure_path()
-            k = nodes.insert_node(self.subs[si], i, j, t)
-            self.sel_node = (si, k)
-            self._push()
+            k, si, i, j, t, q = seg
+            self.cur = k
+            self._ensure_path([k])
+            n = nodes.insert_node(self.items[k].subs[si], i, j, t)
+            self.sel = [(k, si, n)]
+            self._push([k])
             self._finish()
 
-    def wants_key(self, e):
-        return e.key() in (Qt.Key_D, Qt.Key_C, Qt.Key_S, Qt.Key_B, Qt.Key_I, Qt.Key_M, Qt.Key_L, Qt.Key_A, Qt.Key_Delete,
-                           Qt.Key_Backspace, Qt.Key_Escape) and not (e.modifiers() & (Qt.ControlModifier | Qt.AltModifier))
+    # ---- tastiera
+    _KEYS = (Qt.Key_D, Qt.Key_C, Qt.Key_S, Qt.Key_B, Qt.Key_I, Qt.Key_M, Qt.Key_L, Qt.Key_A, Qt.Key_J, Qt.Key_Delete,
+             Qt.Key_Backspace, Qt.Key_Escape)
 
-    def _op(self, fn):
-        self._ensure_path()
+    def wants_key(self, e):
+        m = e.modifiers()
+        if e.key() == Qt.Key_A and (m & Qt.ControlModifier) and not (m & (Qt.AltModifier | Qt.ShiftModifier)):
+            return bool(self.items)  # Ctrl+A: tutti i nodi (invece di «seleziona tutto» del menu)
+        return e.key() in self._KEYS and not (m & (Qt.ControlModifier | Qt.AltModifier))
+
+    def _op(self, fn, ks=None):
+        self._ensure_path(ks)
         fn()
-        self._push()
+        self._push(ks)
         self._finish()
         return True
 
+    def _targets(self):
+        """Nodi su cui agire: quello sotto il mouse se non è fra i selezionati, altrimenti tutti i selezionati."""
+        if self.hover and self.hover[0] == "node":
+            ref = self.hover[1:]
+            if ref not in self.sel:
+                return [ref]
+        return [r for r in self.sel if self._valid(r)]
+
+    def select_all_nodes(self):
+        self.sel = [(k, si, ni) for k, it in enumerate(self.items) for si, sp in enumerate(it.subs)
+                    for ni in range(len(sp.nodes))]
+        if self.sel:
+            self.cur = self.sel[-1][0]
+        self.cv.viewport().update()
+
+    def delete_nodes(self, refs):
+        refs = sorted(set(refs), key=lambda r: (r[0], -r[1], -r[2]))
+        self.sel = []
+
+        def do():
+            for k, si, ni in refs:
+                subs = self.items[k].subs
+                if si < len(subs) and ni < len(subs[si].nodes):
+                    nodes.delete_node(subs, si, ni)
+        return self._op(do, [r[0] for r in refs])
+
     def key(self, e):
         k = e.key()
+        shift = bool(e.modifiers() & Qt.ShiftModifier)
         if k == Qt.Key_Escape:
+            if self.sel:  # 0.19.5: prima toglie la scelta dei nodi, poi torna a Selezione
+                self.sel = []
+                return True
             self.cv.set_tool("select")
             return True
-        target = self.hover if (self.hover and self.hover[0] == "node") else (("node",) + self.sel_node if self.sel_node else None)
-        if target and k in (Qt.Key_D, Qt.Key_Delete, Qt.Key_Backspace):
-            _, si, ni = target
-            self.sel_node = None
-            return self._op(lambda: nodes.delete_node(self.subs, si, ni))
-        if target and k == Qt.Key_C:
-            _, si, ni = target
-            return self._op(lambda: nodes.set_corner(self.subs[si].nodes[ni]))
-        if target and k == Qt.Key_S:
-            _, si, ni = target
-            return self._op(lambda: nodes.set_smooth(self.subs[si], ni))
-        if target and k == Qt.Key_B:
-            _, si, ni = target
-            self.sel_node = None
-            return self._op(lambda: nodes.break_at(self.subs, si, ni))
-        if target and k == Qt.Key_A:
-            _, si, ni = target
+        if k == Qt.Key_A and e.modifiers() & Qt.ControlModifier:
+            self.select_all_nodes()
+            return True
+        if k == Qt.Key_J:
+            return self.join_selected("connect" if shift else "merge")
+        refs = self._targets()
+        if refs and k in (Qt.Key_D, Qt.Key_Delete, Qt.Key_Backspace):
+            return self.delete_nodes(refs)
+        if refs and k == Qt.Key_C:
+            return self._op(lambda: [nodes.set_corner(self._node(r)) for r in refs], [r[0] for r in refs])
+        if refs and k == Qt.Key_S:
+            return self._op(lambda: [nodes.set_smooth(self.items[r[0]].subs[r[1]], r[2]) for r in refs],
+                            [r[0] for r in refs])
+        one = refs[-1] if refs else None
+        if one and k == Qt.Key_B:
+            kk, si, ni = one
+            self.cur = kk
+            self.sel = []
+            return self._op(lambda: nodes.break_at(self.items[kk].subs, si, ni), [kk])
+        if one and k == Qt.Key_A:
+            kk, si, ni = one
+            self.cur = kk
             return self.fillet_node(si, ni)
         if self.hover_seg and k in (Qt.Key_I, Qt.Key_M):
-            si, i, j, t, q = self.hover_seg
+            kk, si, i, j, t, q = self.hover_seg
             tt = 0.5 if k == Qt.Key_M else t
-            return self._op(lambda: nodes.insert_node(self.subs[si], i, j, tt))
+            return self._op(lambda: nodes.insert_node(self.items[kk].subs[si], i, j, tt), [kk])
         if self.hover_seg and k == Qt.Key_L:
-            si, i, j, t, q = self.hover_seg
-            return self._op(lambda: nodes.straighten(self.subs[si], i, j))
+            kk, si, i, j, t, q = self.hover_seg
+            return self._op(lambda: nodes.straighten(self.items[kk].subs[si], i, j), [kk])
         if self.hover_seg and k == Qt.Key_D:
-            si, i, j, t, q = self.hover_seg
-            return self._op(lambda: self._delete_segment(si, i, j))
+            kk, si, i, j, t, q = self.hover_seg
+            self.cur = kk
+            return self._op(lambda: self._delete_segment(si, i, j), [kk])
         return False
+
+    # ---- unione di due nodi (0.19.5)
+    def join_selected(self, mode="merge"):
+        """J = fondi i due estremi selezionati in un punto a metà strada; Maiusc+J = collegali con un tratto dritto.
+        Due forme diverse diventano una sola, sul livello della forma del primo nodo selezionato."""
+        refs = [r for r in self.sel if self._valid(r)]
+        if len(refs) != 2:
+            self.cv.status.emit(tr("Unisci nodi: seleziona due estremi (Ctrl+clic sul secondo)"))
+            return True
+        (ka, sa, na), (kb, sb, nb) = refs
+        ia, ib = self.items[ka], self.items[kb]
+        if not (nodes.is_open_end(ia.subs, sa, na) and nodes.is_open_end(ib.subs, sb, nb)):
+            self.cv.status.emit(tr("Si possono unire solo due estremi di linee aperte"))
+            return True
+        # prova su una copia: niente annulla inutili se non si può
+        if ka == kb:
+            test = [s.copy() for s in ia.subs]
+            why = nodes.join_two(test, (sa, na), (sb, nb), mode)
+        else:
+            test = [s.copy() for s in ia.subs] + [s.copy() for s in ib.subs]
+            why = nodes.join_two(test, (sa, na), (len(ia.subs) + sb, nb), mode)
+        if why:
+            self.cv.status.emit(why)
+            return True
+        self.ed.begin(tr("Unisci nodi") if mode == "merge" else tr("Collega nodi"))
+        self._txn = True
+        self._ensure_path([ka, kb])
+        if ka == kb:
+            nodes.join_two(ia.subs, (sa, na), (sb, nb), mode)
+        else:
+            off = len(ia.subs)
+            ia.subs.extend(ib.subs)
+            nodes.join_two(ia.subs, (sa, na), (off + sb, nb), mode)
+            gone = ib.shape
+            self.ed.doc.shapes.remove(gone)
+            self.ed.selection = [x for x in self.ed.selection if x is not gone]
+            self.items.pop(kb)
+            ka = ka if ka < kb else ka - 1
+        self.cur = ka
+        self.sel = []
+        self.items[ka].shape.set_path(nodes.to_path(self.items[ka].subs))
+        self.ed.preview_changed()
+        self._finish()
+        self.ed.selection_changed.emit()
+        self.cv.status.emit(tr("Nodi uniti") if mode == "merge" else tr("Nodi collegati"))
+        return True
 
     def ask_radius(self):
         """Raggio del raccordo (si ricorda l'ultimo usato). None = annullato."""
@@ -593,7 +808,7 @@ class NodeTool(Tool):
         return r if ok else None
 
     def fillet_node(self, si, ni, r=None):
-        """0.17.13: tasto A sul nodo: arrotonda quello spigolo (raccordo su un angolo solo)."""
+        """0.17.13: tasto A sul nodo: arrotonda quello spigolo (raccordo su un angolo solo). Forma: quella principale."""
         if r is None:
             r = self.ask_radius()
             if r is None:
@@ -603,34 +818,37 @@ class NodeTool(Tool):
         if why:
             self.cv.status.emit(why)
             return True
-        self.sel_node = None
-        return self._op(lambda: nodes.fillet(self.subs[si], ni, r))
+        self.sel = []
+        k = self.cur
+        return self._op(lambda: nodes.fillet(self.items[k].subs[si], ni, r), [k])
 
     def _delete_segment(self, si, i, j):
-        sp = self.subs[si]
+        subs = self.subs
+        sp = subs[si]
         if sp.closed:
             # apre il percorso togliendo il segmento i -> j
             nodes_ = sp.nodes[j:] + sp.nodes[:j]
             nodes_[0].cin = None
             nodes_[-1].cout = None
-            self.subs[si] = nodes.SubPath(nodes_, False)
+            subs[si] = nodes.SubPath(nodes_, False)
         else:
             a = nodes.SubPath(sp.nodes[:i + 1], False)
             b = nodes.SubPath(sp.nodes[j:], False)
             a.nodes[-1].cout = None
             b.nodes[0].cin = None
-            self.subs[si:si + 1] = [x for x in (a, b) if len(x.nodes) >= 2]
+            subs[si:si + 1] = [x for x in (a, b) if len(x.nodes) >= 2]
+        self.sel = []
 
     def draw(self, p, tf):
-        if self.target is None:
+        if not self.items:
             return
         if self.hover_seg:  # 0.18.8: dopo aver tolto dei nodi il tratto evidenziato può non esistere più
-            si, i, j = self.hover_seg[:3]
-            if si >= len(self.subs) or max(i, j) >= len(self.subs[si].nodes):
+            k, si, i, j = self.hover_seg[:4]
+            if k >= len(self.items) or si >= len(self.items[k].subs) or max(i, j) >= len(self.items[k].subs[si].nodes):
                 self.hover_seg = None
         if self.hover_seg:
-            si, i, j, t, q = self.hover_seg
-            sp = self.subs[si]
+            k, si, i, j, t, q = self.hover_seg
+            sp = self.items[k].subs[si]
             seg = QPainterPath()
             a = sp.nodes[i]
             seg.moveTo(*a.pt())
@@ -642,30 +860,39 @@ class NodeTool(Tool):
             p.setPen(_pen("#FFD43B", 2.5))
             p.setBrush(Qt.NoBrush)
             p.drawPath(tf.map(seg))
-        for si, sp in enumerate(self.subs):
-            for ni, nd in enumerate(sp.nodes):
-                v = tf.map(QPointF(*nd.pt()))
-                selected = self.sel_node == (si, ni)
-                if selected:
-                    p.setPen(_pen(C["muted"], 1))
-                    for h in (nd.cin, nd.cout):
-                        if h:
-                            hv = tf.map(QPointF(*h))
-                            p.drawLine(v, hv)
-                            p.setBrush(QColor(C["accent_hi"]))
-                            p.drawEllipse(hv, 3.5, 3.5)
-                hovered = self.hover and self.hover[0] == "node" and self.hover[1:] == (si, ni)
-                fill = C["accent"] if selected else ("#FFD43B" if hovered else "#FFFFFF")
-                p.setPen(_pen(C["accent_lo"] if not selected else "#FFFFFF", 1))
-                p.setBrush(QColor(fill))
-                if nd.smooth:
-                    p.drawEllipse(v, 4, 4)
-                else:
-                    p.drawRect(QRectF(v.x() - 3.5, v.y() - 3.5, 7, 7))
-                if ni == 0 and not sp.closed:
-                    p.setPen(_pen(C["success"], 1.5))
-                    p.setBrush(Qt.NoBrush)
-                    p.drawEllipse(v, 7, 7)
+        sel = set(self.sel)
+        single = self.sel[-1] if len(self.sel) == 1 else None
+        for k, it in enumerate(self.items):
+            for si, sp in enumerate(it.subs):
+                for ni, nd in enumerate(sp.nodes):
+                    v = tf.map(QPointF(*nd.pt()))
+                    ref = (k, si, ni)
+                    selected = ref in sel
+                    if single == ref:  # le maniglie solo quando il nodo selezionato è uno
+                        p.setPen(_pen(C["muted"], 1))
+                        for h in (nd.cin, nd.cout):
+                            if h:
+                                hv = tf.map(QPointF(*h))
+                                p.drawLine(v, hv)
+                                p.setBrush(QColor(C["accent_hi"]))
+                                p.drawEllipse(hv, 3.5, 3.5)
+                    hovered = self.hover and self.hover[0] == "node" and self.hover[1:] == ref
+                    fill = C["accent"] if selected else ("#FFD43B" if hovered else "#FFFFFF")
+                    p.setPen(_pen(C["accent_lo"] if not selected else "#FFFFFF", 1))
+                    p.setBrush(QColor(fill))
+                    if nd.smooth:
+                        p.drawEllipse(v, 4, 4)
+                    else:
+                        p.drawRect(QRectF(v.x() - 3.5, v.y() - 3.5, 7, 7))
+                    if ni == 0 and not sp.closed:
+                        p.setPen(_pen(C["success"], 1.5))
+                        p.setBrush(Qt.NoBrush)
+                        p.drawEllipse(v, 7, 7)
+        if self.band is not None:
+            a, b = self.band
+            p.setPen(_pen(C["accent_hi"], 1, Qt.DashLine))
+            p.setBrush(QColor(77, 171, 247, 30))
+            p.drawRect(QRectF(a, b).normalized())
 
 
 # ======================================================================= penna (linee e Bézier)

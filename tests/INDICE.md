@@ -1,7 +1,7 @@
 # Prove automatiche di FreeLaserCut, per area
 
 Generato da `tests/run_tests.py` (non modificare a mano): ogni suite sta nell'area della sua descrizione.
-Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
+Suite: 149. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
 
 ## Wi-Fi, rete e telefono (12)
 
@@ -26,7 +26,7 @@ Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v175.py` (Banco): Punti a mano della camera nell'interfaccia Banco
 - `test_v181_camera.py` (Banco): Telecamere del Falcon A1 nell'interfaccia Banco
 
-## Nesting e piani di lavoro (13)
+## Nesting e piani di lavoro (15)
 
 - `test_v08.py`: Ottimizza lo spazio (nesting) e modelli di laser pronti
 - `test_v09.py`: QR e codici a barre, testo su tracciato, rotativo, più pannelli e linee comuni
@@ -41,6 +41,8 @@ Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v1817_nesting_manuale.py` (Banco): Nesting manuale (correzioni) nell'interfaccia Banco
 - `test_v190_nesting_finestra.py`: Nesting manuale in una finestra sola, homing dalla spunta del laser
 - `test_v190_nesting_finestra.py` (Banco): Nesting manuale in una finestra sola nell'interfaccia Banco
+- `test_v195_varie.py`: Nesting manuale che sporge dai pannelli, elenco delle scorciatoie, Sculpfun E1 dalla scheda e tabella Sculpfun, Riconosci → Applica che tiene angolo e assi
+- `test_v195_varie.py` (Banco): Nesting manuale e scorciatoie nell'interfaccia Banco
 
 ## Materiali (4)
 
@@ -88,7 +90,7 @@ Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v185_aria.py` (Banco): Comando dell'air assist nell'interfaccia Banco
 - `test_v192_g55.py`: Scheda che su G55 tace o risponde con un errore, in verifica e nel lavoro: lavoro fermato e rifatto senza
 
-## Macchina, connessione e profili (35)
+## Macchina, connessione e profili (37)
 
 - `test_v104.py`: Rapporto per l'assistenza, registro della comunicazione, installatore
 - `test_v122.py`: Assi invertibili, velocità in mm/s, MKS DLC32
@@ -125,8 +127,10 @@ Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v193_piano.py` (Banco): Piano ruotato e angolo dell'homing nell'interfaccia Banco
 - `test_v193_cerca.py`: Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica
 - `test_v194_sculpfun_e1.py`: Sculpfun E1 nel catalogo: 12 W, Pro 21 W e modulo infrarosso, riconoscimento dall'area di lavoro
+- `test_v195_movimento.py`: Scheda Movimento: Puntino e Lucciola al centro delle frecce, joystick virtuale sul simulatore
+- `test_v195_movimento.py` (Banco): Puntino, Lucciola e joystick nell'interfaccia Banco
 
-## Disegno e modifica (15)
+## Disegno e modifica (17)
 
 - `test_editor_ui.py`: Editor: mouse e tastiera sulla tela
 - `test_v04.py`: Progetti .lbrn2, galleria forme, comandi da Claude (MCP)
@@ -143,6 +147,8 @@ Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v190_interfaccia.py`: Doppio clic = strumento bloccato; scritte delle linguette dei piani
 - `test_v190_interfaccia.py` (Banco): Strumento bloccato e linguette nell'interfaccia Banco
 - `test_v192_analisi.py` (Banco): Banco sugli schermi piccoli, avvio fermo al suo posto, barra della selezione, ricerca e Preferenze
+- `test_v195_nodi.py`: Strumento Nodi: più nodi selezionati insieme, nodi di più forme, unione di due nodi (J fonde, Maiusc+J collega)
+- `test_v195_nodi.py` (Banco): Strumento Nodi con più nodi e unione nell'interfaccia Banco
 
 ## Interfaccia (17)
 

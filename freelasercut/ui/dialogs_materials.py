@@ -186,6 +186,14 @@ class MaterialLibraryDialog(QDialog):
         win = self.parent()
         return win.material_ratio() if hasattr(win, "material_ratio") else None
 
+    def model(self):
+        """0.19.5: modello della macchina attiva, per la tabella ufficiale del produttore (oggi la Sculpfun E1)."""
+        prof = getattr(self.parent(), "profile", None)
+        return getattr(prof, "model", None)
+
+    def official(self):
+        return bool(mats.official(self.model()))
+
     def _watts_changed(self, value):
         win = self.parent()
         if hasattr(win, "set_material_watts"):
@@ -196,7 +204,11 @@ class MaterialLibraryDialog(QDialog):
         if not self.watts_row.isVisibleTo(self):
             return
         w = self.e_watts.value()
-        if self.ratio():
+        if self.official():
+            self.watts_note.setText(tr("Valori dalla tabella ufficiale Sculpfun per la {0} (le voci ★ sono tue e restano "
+                                       "come sono). Sono di partenza, non provati con FreeLaserCut: fai un test materiale "
+                                       "prima del pezzo buono.", self.model()))
+        elif self.ratio():
             self.watts_note.setText(tr("Valori stimati per {0:g} W dalla tabella del Longer B1 40W (le voci ★ sono tue e "
                                        "restano come sono). È una stima: fai un test materiale prima del pezzo buono.", w))
         else:
@@ -213,7 +225,7 @@ class MaterialLibraryDialog(QDialog):
         user_keys = {m.key() for m in mats.load_user()}
         groups = {}
         mono = style.mono_font(9)
-        for m in mats.library(self.ratio()):
+        for m in mats.library(self.ratio(), self.model()):
             hay = f"{m.name} {m.operation} {m.thickness:g} {m.note}".lower()
             if op and m.operation != op or any(t not in hay for t in q):
                 continue
@@ -258,7 +270,8 @@ class MaterialLibraryDialog(QDialog):
         self.b_del.setEnabled(user)
         self.title.setText(f"{m.name} — {m.label()}")
         self.src.setText(tr("Voce tua") if user else
-                         tr("Stima per {0:g} W dalla tabella {1}", self.e_watts.value(), m.source) if self.ratio() else
+                         tr("Stima per {0:g} W dalla tabella {1}", self.e_watts.value(), m.source)
+                         if self.ratio() and not self.official() else
                          tr("Tabella {0}", m.source))
         self.e_name.setText(m.name)
         self.e_op.setCurrentText(m.operation)

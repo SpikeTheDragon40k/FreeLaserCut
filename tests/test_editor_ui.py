@@ -36,6 +36,19 @@ def drag(a, b, mods=Qt.NoModifier, steps=8):
         _send(QEvent.MouseMove, p, Qt.NoButton, Qt.LeftButton, mods); spin(0.01)
     _send(QEvent.MouseButtonRelease, b, Qt.LeftButton, Qt.NoButton, mods); spin()
 cv.snap_objects = False
+def settle(limit=8.0, quiet=0.4):
+    # 0.19.5: al primo lancio (cache vuote) la finestra finisce di sistemarsi (pannelli, barre) dopo spin(0.8) e la
+    # vista si sposta a metà del trascinamento: il rettangolo usciva 80,20 × 48,56. Si aspetta che la vista stia ferma.
+    end = time.time() + limit; last = None; since = time.time()
+    while time.time() < end:
+        now = (cv.to_view(QPointF(0, 0)).toTuple(), cv.to_view(QPointF(100, 100)).toTuple(), vp.size().toTuple())
+        if now != last:
+            last, since = now, time.time()
+        elif time.time() - since >= quiet:
+            return True
+        spin(0.02)
+    return False
+check('la vista si è fermata prima delle prove col mouse', settle())
 # --- rettangolo con lo strumento
 w.tool_actions['rect'].trigger(); spin()
 drag(V(50, 50), V(130, 100))

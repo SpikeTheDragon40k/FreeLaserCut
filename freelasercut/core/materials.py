@@ -102,6 +102,51 @@ _LONGER_B1_40W = [
 ]
 
 
+# 0.19.5: tabella ufficiale Sculpfun per la serie E1 («Sculpfun machines parameters», foglio «E1», Google Sheets
+# linkato dal centro download sculpfun.com, letto il 14/11/2026). Per modello del catalogo (machines.E1): valori di
+# partenza del produttore, non provati con FreeLaserCut. Accelerazione 1000 e intervallo 0,1 mm in tutte le righe;
+# dove Sculpfun scrive «Stucki» (retinatura per le foto) qui resta il riempimento, con la nota.
+_SC = "Tabella Sculpfun E1"
+_ST = "Sculpfun: per le foto con retinatura Stucki"
+_E1_ENGRAVE_12 = [
+    ("Compensato di tiglio", 20, 6000, _ST), ("MDF", 20, 6000, _ST), ("Alluminio anodizzato nero", 40, 10000, _ST),
+    ("Ardesia", 60, 10000, ""), ("Pelle / cuoio", 40, 10000, ""), ("Carta kraft", 10, 10000, ""),
+    ("Cartone ondulato", 20, 10000, ""), ("Acrilico (nero/colorato)", 40, 10000, _ST),
+    ("Carta fotografica nera", 10, 10000, _ST), ("Ferro (togliere la ruggine)", 80, 10000, _ST),
+    ("Acciaio inox", 70, 10000, _ST),
+]
+_E1_CUT_12 = [("Compensato di tiglio", 3, 100, 600), ("Compensato di tiglio", 5, 100, 360),
+              ("Compensato di tiglio", 8, 100, 160), ("MDF", 3, 100, 200), ("Paulonia", 10, 100, 180)]
+_E1_ENGRAVE_21 = [
+    ("Compensato di tiglio", 10, 5000, _ST), ("MDF", 10, 5500, _ST), ("Alluminio anodizzato nero", 10, 6000, _ST),
+    ("Ardesia", 10, 6000, ""), ("Carta kraft", 6, 5000, ""), ("Cartone ondulato", 10, 6000, ""),
+    ("Acrilico (nero/colorato)", 10, 6000, _ST),
+]
+_E1_CUT_21 = [("Compensato di tiglio", 3, 100, 750), ("Compensato di tiglio", 5, 100, 400),
+              ("Compensato di tiglio", 8, 100, 200), ("Compensato di tiglio", 10, 100, 100), ("MDF", 3, 100, 300),
+              ("Paulonia", 10, 100, 300)]
+_E1_ENGRAVE_IR = [
+    ("Acciaio inox", 100, 1000, _ST), ("Carta fotografica nera", 15, 4000, _ST), ("Piastra rame per PCB", 100, 1000, ""),
+    ("Ciottolo / pietra", 80, 3000, _ST), ("Acrilico nero", 35, 4000, _ST), ("Alluminio (argento)", 100, 1000, ""),
+    ("Alluminio anodizzato nero", 20, 10000, _ST),
+]
+_E1_TABLES = {"Sculpfun E1 12W": (_E1_ENGRAVE_12, _E1_CUT_12), "Sculpfun E1 Pro 21W": (_E1_ENGRAVE_21, _E1_CUT_21),
+              "Sculpfun E1 3W IR": (_E1_ENGRAVE_IR, [])}
+
+
+def official(model):
+    """Voci ufficiali del produttore per questo modello del catalogo (oggi la serie E1), o [] se non ce ne sono."""
+    t = _E1_TABLES.get(model or "")
+    if t is None:
+        return []
+    out = []
+    for name, pw, sp, note in t[0]:
+        out.append(Material(name, _E, 0, float(pw), float(sp), 1, 0.0, "fill", 0.1, note, _SC, model))
+    for name, th, pw, sp in t[1]:
+        out.append(Material(name, _C, float(th), float(pw), float(sp), 1, 0.0, "line", 0.1, "", _SC, model))
+    return out
+
+
 def builtin():
     out = []
     for name, op, th, pw, sp, ps, df, note in _LONGER_B1_40W:
@@ -162,11 +207,16 @@ def _round2(v):
     return float(round(v / k) * k)
 
 
-def library(ratio=None):
+def library(ratio=None, model=None):
     """Voci dell'utente (prima, hanno la precedenza) + tabella Longer.
-    ratio: vedi scaled(); vale solo per le voci della tabella, quelle dell'utente restano come le ha salvate."""
+    ratio: vedi scaled(); vale solo per le voci della tabella, quelle dell'utente restano come le ha salvate.
+    model (0.19.5): se il produttore ha una tabella sua per quel modello (official), si usa quella al posto della
+    stima dalla tabella Longer."""
     user = load_user()
     keys = {m.key() for m in user}
+    own = official(model)
+    if own:
+        return user + [m for m in own if m.key() not in keys]
     return user + [scaled(m, ratio) for m in builtin() if m.key() not in keys]
 
 

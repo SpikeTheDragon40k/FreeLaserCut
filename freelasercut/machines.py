@@ -536,6 +536,19 @@ def identify(banner=(), info=(), settings=None, port=None, baud=115200):
         ident.model = "Longer B1 40W"
         ident.notes.append(("info", tr("Longer B1 riconosciuto da firmware e area di lavoro. La potenza del modulo non si "
                                     "legge dalla scheda: confermala nel nome (20, 30 o 40 W).")))
+    # 0.19.5: la scheda della E1 lo scrive lei («[VER:…:Sculpfun E1]» in $I, «[MSG:Using machine: Sculpfun E1]»
+    # all'avvio: firmware ufficiale V1.0.5): la famiglia si sceglie da lì, anche se l'area letta non torna
+    if not ident.model and re.search(r"SCULPFUN\s+E1\b", up):
+        ident.vendor = "Sculpfun"
+        ident.model = E1[0]
+        ident.candidates = list(E1)
+        ident.notes.append(("info", tr("Sculpfun E1 riconosciuta dalla scheda. Il modulo laser montato non si legge dalla "
+                                       "scheda: se non è quello da 12 W, scegli la voce giusta nell'elenco dei modelli "
+                                       "({0}).",
+                                       ", ".join(E1[1:]))))
+        if bx and by and not any(abs(bx - a) <= 2 and abs(by - b) <= 2 for a, b in ((400, 320), (320, 400))):
+            ident.notes.append(("warn", tr("La scheda dice {0:g} × {1:g} mm di area di lavoro, la E1 di fabbrica "
+                                           "400 × 320: controlla $130 e $131 nella scheda Macchina.", bx, by)))
     if ident.vendor and not ident.model and bx and by:
         def gap(n, cx, cy):  # distanza dall'area del catalogo o da quella dichiarata (anche con X e Y scambiati)
             ax, ay = AREA_NOTE.get(n, (cx, cy))

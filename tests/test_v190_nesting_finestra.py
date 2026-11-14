@@ -32,7 +32,7 @@ os.environ.pop("FLC_SIM_NEGATIVE", None)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from PySide6.QtCore import QEvent, QPoint, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QKeyEvent, QKeySequence, QMouseEvent, QPainterPath, QShortcutEvent, QTransform  # noqa: E402
+from PySide6.QtGui import QFontMetrics, QKeyEvent, QKeySequence, QMouseEvent, QPainterPath, QShortcutEvent, QTransform  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox, QToolButton  # noqa: E402
 
 app = QApplication([])
@@ -171,8 +171,14 @@ panel = w.nest_dialog(mode="manual")
 check("si apre UNA finestra, «Nesting manuale», non bloccante", panel is not None and panel.isVisible()
       and not panel.isModal() and sorted(map(id, windows())) == sorted((id(w), id(panel)))
       and panel.windowTitle() == nest_manual.tr("Nesting manuale"), [x.windowTitle() for x in windows()])
-check("è stretta (al massimo 400 punti) e sta di lato, a destra, fuori dal centro del piano",
-      panel.width() <= 400 and panel.geometry().left() > w.geometry().center().x(), (panel.geometry(), w.geometry()))
+# 0.19.5: sporge a sinistra dei pannelli di destra quanto la parola «Nesting» (test_v195_varie), sempre dentro lo schermo
+_left = panel.right_panels_left()
+_scr = panel.screen().availableGeometry()
+_want = (max(_scr.left(), min(_left - QFontMetrics(panel.font()).horizontalAdvance("Nesting") - 8,
+                              _scr.right() - panel.width())) if _left is not None else None)
+check("è stretta (al massimo 400 punti) e sta di lato, a destra, sporgendo dai pannelli di destra",
+      panel.width() <= 400 and (_want is None and panel.geometry().left() > w.geometry().center().x()
+                                or _want is not None and abs(panel.x() - _want) <= 2), (panel.geometry(), w.geometry(), _want))
 check("passo 1 in vista, passo 2 no; i due passi sono scritti", panel.step == 1 and shown(panel.p1, panel)
       and not shown(panel.p2, panel) and not shown(panel.sum1, panel) and "1" in panel.head1.text()
       and "<b>" in panel.head1.text() and "2" in panel.head2.text() and "<b>" not in panel.head2.text())

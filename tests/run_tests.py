@@ -493,6 +493,12 @@ if __name__ == "__main__":
     run_suite("test_v193_cerca.py", "Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica")
     run_suite("test_v193_cerca.py", "Ricerca comandi nell'interfaccia Banco: resta la finestrella", "banco")
     run_suite("test_v194_sculpfun_e1.py", "Sculpfun E1 nel catalogo: 12 W, Pro 21 W e modulo infrarosso, riconoscimento dall'area di lavoro")
+    run_suite("test_v195_nodi.py", "Strumento Nodi: più nodi selezionati insieme, nodi di più forme, unione di due nodi (J fonde, Maiusc+J collega)")
+    run_suite("test_v195_nodi.py", "Strumento Nodi con più nodi e unione nell'interfaccia Banco", "banco")
+    run_suite("test_v195_movimento.py", "Scheda Movimento: Puntino e Lucciola al centro delle frecce, joystick virtuale sul simulatore")
+    run_suite("test_v195_movimento.py", "Puntino, Lucciola e joystick nell'interfaccia Banco", "banco")
+    run_suite("test_v195_varie.py", "Nesting manuale che sporge dai pannelli, elenco delle scorciatoie, Sculpfun E1 dalla scheda e tabella Sculpfun, Riconosci → Applica che tiene angolo e assi")
+    run_suite("test_v195_varie.py", "Nesting manuale e scorciatoie nell'interfaccia Banco", "banco")
     if "--camera" in sys.argv:
         print("Camera AutoCam (circa 6 minuti)");  test_camera()
     flush()

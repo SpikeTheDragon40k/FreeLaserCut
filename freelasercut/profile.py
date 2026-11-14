@@ -366,6 +366,22 @@ class MachineProfile:
         neg = bool(self.negative_space)
         return ("b" if self.invert_y != neg else "f") + ("r" if self.invert_x != neg else "l")
 
+    def keep_user_orientation(self, old):
+        """0.19.5: «Riconosci la macchina → Applica» rifà il profilo dalla scheda; quello che l'utente ha deciso per la
+        stessa macchina non va perso: piano ruotato, angolo dello 0, assi provati con le frecce (o decisi a mano) e
+        il loro verso. Gli assi non provati seguono di nuovo l'angolo scelto, con le coordinate lette ora."""
+        self.set_view_rot(old.rot())
+        if self.negative_space is None and old.negative_space is not None:
+            self.negative_space = old.negative_space  # già visto con l'homing su questa macchina
+        if old.origin_corner:
+            self.origin_corner = old.origin_corner
+        if old.tested_x or old.axes_tested:
+            self.invert_x, self.tested_x = old.invert_x, True
+        if old.tested_y or old.axes_tested:
+            self.invert_y, self.tested_y = old.invert_y, True
+        self.axes_tested = bool(self.tested_x and self.tested_y)
+        self.recompute_untested_axes()
+
     def recompute_untested_axes(self):
         """Dopo l'homing (coordinate negative o no ora note): il verso degli assi NON provati segue l'angolo scelto.
         Gli assi provati con le frecce restano come sono. -> True se è cambiato qualcosa."""

@@ -442,9 +442,11 @@ class MachineWizard(QDialog):
             name = tr("Simulatore")
         p = machines.build_profile(self.ident, r["settings"], r["info"], name)
         p.set_travel(self.bed_x.value(), self.bed_y.value())
-        if os.path.exists(p.path()):  # 0.19.3: stessa macchina già configurata: il piano ruotato resta com'era
+        if os.path.exists(p.path()):
+            # stessa macchina già configurata: piano ruotato (0.19.3), angolo dello 0 e verso degli assi provati
+            # (0.19.5) restano com'erano
             try:
-                p.set_view_rot(MachineProfile.load(p.path()).rot())
+                p.keep_user_orientation(MachineProfile.load(p.path()))
             except (OSError, ValueError, TypeError):
                 pass
         try:

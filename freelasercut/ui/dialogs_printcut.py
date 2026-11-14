@@ -1,25 +1,24 @@
 # FreeLaserCut — © 2026 fringuello79 — GPL-3.0-or-later
-"""Strumenti → Stampa e taglia (0.18.5, funzione in prova: si vede solo con il codice amministratore).
+"""Strumenti → Stampa e taglia (0.18.5; per tutti dalla 0.19.5, prima era fra le funzioni in prova).
 
 Tre passi, nella stessa finestra che resta aperta accanto al piano:
 1. prepara: immagine da stampare a colori (facoltativa) e le due crocette;
 2. stampa: il PDF al 100% con disegno e crocette;
-3. allinea: foglio sul piano, testa sulle due crocette con il puntino, e il disegno va sopra il foglio vero.
+3. allinea: foglio sul piano, testa sulle due crocette con frecce o joystick e Puntino/Lucciola (gli stessi comandi
+   della scheda Movimento, jogpad.py), e il disegno va sopra il foglio vero.
 Poi si avvia il lavoro come sempre (coordinate assolute): si tagliano solo i livelli con l'uscita accesa.
 La matematica e la stampa sono in core/print_cut.py.
 """
 import os
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QPushButton, QVBoxLayout)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QPushButton,
+                               QVBoxLayout)
 
 from ..core import io_formats
 from ..core import print_cut as pc
 from freelasercut.i18n import tr  # noqa: E402
 
-JOG_STEPS = (10.0, 1.0, 0.1)
-POINTER_S = 120.0  # il puntino si spegne da solo dopo due minuti
 
 
 class PrintCutDialog(QDialog):
@@ -28,7 +27,7 @@ class PrintCutDialog(QDialog):
         self.main, self.ed, self.ctl = main, main.editor, main.ctl
         self.pts = [None, None]  # punti presi con la testa (coordinate del piano)
         self.last_info = None  # esito dell'ultimo allineamento
-        self.setWindowTitle(tr("Stampa e taglia (in prova)"))
+        self.setWindowTitle(tr("Stampa e taglia"))
         self.setMinimumWidth(470)
         v = QVBoxLayout(self)
         intro = QLabel(tr("Per tagliare attorno a qualcosa di già stampato (adesivi, etichette, cartoncino).<br>"
@@ -76,38 +75,21 @@ class PrintCutDialog(QDialog):
         g3 = QGroupBox(tr("3 · Allinea il disegno al foglio"))
         l3 = QVBoxLayout(g3)
         how = QLabel(tr("Fissa il foglio sul piano (anche un po' storto), fai l'homing, poi porta la testa sul centro "
-                        "di ogni crocetta con le frecce e il puntino."))
+                        "di ogni crocetta con le frecce (o il joystick) e il Puntino o la Lucciola."))
         how.setWordWrap(True)
         l3.addWidget(how)
-        pad = QGridLayout()
-        self.jog_btns = {}
-        for (txt, dx, dy, r, c) in (("▲", 0, 1, 0, 1), ("◀", -1, 0, 1, 0), ("▶", 1, 0, 1, 2), ("▼", 0, -1, 2, 1)):
-            b = QPushButton(txt)
-            b.setFixedSize(46, 34)
-            b.clicked.connect(lambda _=False, dx=dx, dy=dy: self.jog(dx, dy))
-            pad.addWidget(b, r, c)
-            self.jog_btns[(dx, dy)] = b
-        self.step = QComboBox()
-        for s in JOG_STEPS:
-            self.step.addItem(tr("{0:g} mm", s), s)
-        self.step.setCurrentIndex(1)
-        self.step.setMinimumHeight(30)
-        pad.addWidget(self.step, 1, 1)
-        self.b_dot = QPushButton(tr("Puntino"))
-        self.b_dot.setCheckable(True)
-        self.b_dot.setToolTip(tr("Accende il laser alla potenza del puntino (quella del pannello Laser) per vedere dove "
-                                 "punta la testa. Si spegne da solo dopo due minuti. Occhiali protettivi!"))
-        self.b_dot.toggled.connect(self.pointer)
-        self.b_dot.setMinimumHeight(34)
-        side = QVBoxLayout()
-        side.addWidget(self.b_dot)
+        # 0.19.5: lo stesso sistema della scheda Movimento (frecce con passi, Puntino e Lucciola al centro, joystick)
+        from .jogpad import JogPad
+
+        self.pad = JogPad(self.ctl, main.qs, lambda: main.profile, main.canvas.head_pos, main.move.feed.value)
+        self.pad.attach_laser(main.laser)
+        self.jog_btns = self.pad.jog_buttons
         self.l_pos = QLabel("")
-        side.addWidget(self.l_pos)
-        side.addStretch(1)
+        self.l_pos.setWordWrap(True)
         jr = QHBoxLayout()
-        jr.addLayout(pad)
+        jr.addWidget(self.pad, 0)
         jr.addSpacing(12)
-        jr.addLayout(side, 1)
+        jr.addWidget(self.l_pos, 1)
         l3.addLayout(jr)
         self.b_take, self.l_take = [], []
         for i, txt in enumerate((tr("La testa è sulla crocetta 1 (un cerchio)"),
@@ -184,13 +166,7 @@ class PrintCutDialog(QDialog):
         self.b_pdf.setEnabled(have)
         why = self.machine_ready()
         moving_ok = self.ctl.connected and not (self.ctl.job_active or self.ctl.checking)
-        for b in self.jog_btns.values():
-            b.setEnabled(moving_ok)
-        self.b_dot.setEnabled(moving_ok)
-        if self.b_dot.isChecked() and not getattr(self.ctl, "fire_active", False):
-            self.b_dot.blockSignals(True)  # spento da solo (tempo scaduto, lavoro, disconnessione)
-            self.b_dot.setChecked(False)
-            self.b_dot.blockSignals(False)
+        self.pad.set_connected(moving_ok)
         for b in self.b_take:
             b.setEnabled(have and why is None)
             b.setToolTip(why or "")
@@ -297,19 +273,17 @@ class PrintCutDialog(QDialog):
 
     # ------------------------------------------------------------------ 3. allinea
     def jog(self, dx, dy):
+        """Un passo con le frecce (passo scelto nella fila, velocità del jog della scheda Movimento)."""
         if not self.ctl.connected or self.ctl.job_active or self.ctl.checking:
             return
-        s = float(self.step.currentData())
-        self.ctl.jog(dx * s, dy * s, 3000 if s >= 5 else 600)
+        self.pad.jog_press(dx, dy)
+        self.pad.jog_release()
 
-    def pointer(self, on):
-        if on and (not self.ctl.connected or self.ctl.job_active or self.ctl.checking):
-            self.b_dot.blockSignals(True)
-            self.b_dot.setChecked(False)
-            self.b_dot.blockSignals(False)
-            return
-        pct = float(self.main.laser.fire_pct.value())
-        self.ctl.fire(bool(on), pct, timeout_s=POINTER_S, s_max=self.main.profile.s_max)
+    def lights_off(self):
+        """Spegne Lucciola e joystick (dopo l'allineamento e alla chiusura)."""
+        self.pad.joy.stop()
+        if self.main.laser._glow_on:
+            self.main.laser.glow_stop()
 
     def take(self, number, pos=None):
         """Prende la posizione della testa come centro della crocetta 1 o 2 (pos: solo per le prove)."""
@@ -344,8 +318,7 @@ class PrintCutDialog(QDialog):
             return self.say(tr("Con il foglio in quella posizione il taglio uscirebbe dall'area di lavoro "
                                "({0:.0f} × {1:.0f} mm): sposta il foglio più dentro al piano e riprendi le crocette.",
                                prof.bed_x, prof.bed_y), True)
-        if self.b_dot.isChecked():
-            self.b_dot.setChecked(False)
+        self.lights_off()
 
         def do():
             for s in list(doc.shapes):  # tutto il piano insieme, anche le forme bloccate: stampa e taglio a registro
@@ -379,6 +352,5 @@ class PrintCutDialog(QDialog):
             self.ed.changed.disconnect(self.refresh)
         except (RuntimeError, TypeError):
             pass
-        if self.b_dot.isChecked() and self.ctl.connected:
-            self.ctl.fire(False)
+        self.lights_off()
         super().closeEvent(ev)

@@ -594,43 +594,37 @@ class MovePanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(6, 4, 6, 6)
         v.setSpacing(5)
-        grid = QGridLayout()
-        grid.setSpacing(5)
-        arrows = [("arrow_ul", -1, 1), ("arrow_up", 0, 1), ("arrow_ur", 1, 1), ("arrow_left", -1, 0), None,
-                  ("arrow_right", 1, 0), ("arrow_dl", -1, -1), ("arrow_down", 0, -1), ("arrow_dr", 1, -1)]
-        self.jog_buttons = []
-        for i, a in enumerate(arrows):
-            r, c = divmod(i, 3)
-            b = QToolButton()
-            b.setFixedSize(52, 44)
-            if a is None:
-                b.setIcon(style.icon("origin", C["accent_hi"], 22))
-                b.setToolTip(tr("Vai all'origine di lavoro (X0 Y0)"))
-                b.clicked.connect(lambda: self.ctl.go_to_origin(self.feed.value()))
-            else:
-                name, dx, dy = a
-                b.setIcon(style.icon(name, size=22))
-                b.pressed.connect(lambda dx=dx, dy=dy: self._jog_press(dx, dy))
-                b.released.connect(self._jog_release)
-            b.setIconSize(b.size() * 0.45)
-            grid.addWidget(b, r, c)
-            self.jog_buttons.append(b)
+        # 0.19.5: frecce (con Puntino e Lucciola al centro) o joystick, uguali in Stampa e taglia (jogpad.py)
+        from .jogpad import JogPad
+
+        self.feed = units.SpeedSpin(100, 36000, 3000, 500)
+        self.feed.setValue(float(self.qs.value("jog_feed", 3000)))
+        self.feed.valueChanged.connect(lambda x: self.qs.setValue("jog_feed", x))
+        self.pad = JogPad(ctl, settings, get_profile, get_head, self.feed.value)
+        self.jog_buttons = self.pad.jog_buttons
+        self.steps = self.pad.steps
+        self.cont = self.pad.cont
         top = QHBoxLayout()
-        top.addLayout(grid)
+        top.addWidget(self.pad.stack, 0, Qt.AlignTop)
         side = QVBoxLayout()
         self.b_home = _btn(tr("Homing"), "home", tip=tr("Ciclo di homing ($H)"))
         self.b_home.clicked.connect(self.ctl.home)
         self.b_unlock = _btn(tr("Sblocca"), "unlock", tip=tr("Sblocca dopo un allarme ($X)"))
         self.b_unlock.clicked.connect(self.ctl.unlock)
+        # 0.19.5: era nella casella centrale della croce (ora Puntino e Lucciola)
+        self.b_goto0 = _btn(tr("Vai a X0 Y0"), "origin", tip=tr("Vai all'origine di lavoro (X0 Y0)"))
+        self.b_goto0.clicked.connect(lambda: self.ctl.go_to_origin(self.feed.value()))
         self.b_origin = _btn(tr("Origine qui"), "origin", tip=tr("La posizione attuale diventa l'origine utente (X0 Y0)"))
         self.b_origin.clicked.connect(self.ctl.set_work_origin)
         self.b_clear = _btn(tr("Togli origine"), "x", tip=tr("Origine utente = origine macchina"))
         self.b_clear.clicked.connect(lambda: self.ctl.send_line("G10 L2 P1 X0 Y0"))
-        for b in (self.b_home, self.b_unlock, self.b_origin, self.b_clear):
+        for b in (self.b_home, self.b_unlock, self.b_goto0, self.b_origin, self.b_clear):
             side.addWidget(b)
         side.addStretch(1)
         top.addLayout(side)
+        top.addStretch(1)
         v.addLayout(top)
+        v.addWidget(self.pad)  # sotto la croce: interruttore Frecce | Joystick, passi e «Continuo»
         # 0.17.12: asse Z motorizzato e autofocus (si vede solo se il profilo ha l'asse Z)
         self.z_box = QWidget()
         zr = QHBoxLayout(self.z_box)
@@ -653,32 +647,6 @@ class MovePanel(QWidget):
         v.addWidget(self.z_box)
         self.z_box.setVisible(bool(getattr(self.get_profile(), "z_motor", False)))
         self.ctl.status_changed.connect(self._z_visible)
-        seg = QHBoxLayout()
-        seg.setSpacing(4)
-        self.steps = []
-        saved = float(self.qs.value("jog_step", 10))
-        for s in (0.1, 1, 10, 50, 100):
-            b = QToolButton()
-            b.setText(f"{s:g}")
-            b.setCheckable(True)
-            b.setChecked(abs(s - saved) < 1e-9)
-            b.setMinimumWidth(40)
-            b.clicked.connect(lambda _=False, s=s, b=b: self._step(s, b))
-            seg.addWidget(b)
-            self.steps.append((s, b))
-        if not any(b.isChecked() for _, b in self.steps):
-            self.steps[2][1].setChecked(True)
-        self.cont = QCheckBox(tr("Continuo"))
-        self.cont.setToolTip(tr("Tieni premuta una freccia: la testa si muove finché non la rilasci"))
-        self.cont.setChecked(self.qs.value("jog_cont", "false") == "true")
-        self.cont.toggled.connect(lambda x: self.qs.setValue("jog_cont", "true" if x else "false"))
-        seg.addWidget(self.cont)
-        seg.addStretch(1)
-        v.addWidget(QLabel(tr("Passo (mm)")))
-        v.addLayout(seg)
-        self.feed = units.SpeedSpin(100, 36000, 3000, 500)
-        self.feed.setValue(float(self.qs.value("jog_feed", 3000)))
-        self.feed.valueChanged.connect(lambda x: self.qs.setValue("jog_feed", x))
         v.addWidget(row(QLabel(tr("Velocità jog")), self.feed))
         v.addWidget(section(tr("Vai a")))
         self.gx = NumField(0, 2, 1, "", 74, 0)
@@ -708,55 +676,22 @@ class MovePanel(QWidget):
         self.set_connected(False)
 
     def step(self):
-        for s, b in self.steps:
-            if b.isChecked():
-                return s
-        return 10.0
+        return self.pad.step()
 
     def _step(self, s, btn):
-        for _, b in self.steps:
-            b.setChecked(b is btn)
-        self.qs.setValue("jog_step", s)
+        self.pad._step(s, btn)
 
     def _jog_press(self, dx, dy):
-        if not self.ctl.connected:
-            return
-        if self.cont.isChecked():
-            # con i soft limits GRBL rifiuta un jog oltre l'area: punto esattamente al bordo del piano
-            prof = self.get_profile()
-            head = self.get_head()
-            if head is None:
-                return
-            import math
-
-            L = math.hypot(dx, dy)
-            ux, uy = dx / L, dy / L
-            margin = 0.5
-            t = float("inf")
-            for p, u, hi in ((head.x(), ux, prof.bed_x), (head.y(), uy, prof.bed_y)):
-                if u > 0:
-                    t = min(t, (hi - margin - p) / u)
-                elif u < 0:
-                    t = min(t, (p - margin) / -u)
-            if t <= 0 or t == float("inf"):
-                return
-            mx, my = prof.to_machine(head.x() + ux * t, head.y() + uy * t)
-            self._cont = True
-            self.ctl.goto_machine(mx, my, self.feed.value())
-        else:
-            self._cont = False
-            s = self.step()
-            self.ctl.jog(dx * s, dy * s, self.feed.value())
+        self.pad.jog_press(dx, dy)
 
     def _jog_release(self):
-        if getattr(self, "_cont", False):
-            self.ctl.jog_cancel()
-            self._cont = False
+        self.pad.jog_release()
 
     def set_connected(self, ok):
-        for w in self.jog_buttons + [self.b_home, self.b_unlock, self.b_origin, self.b_clear, self.b_zup,
-                                     self.b_zdown, self.b_af]:
+        for w in [self.b_home, self.b_unlock, self.b_goto0, self.b_origin, self.b_clear, self.b_zup, self.b_zdown,
+                  self.b_af]:
             w.setEnabled(ok)
+        self.pad.set_connected(ok)
 
     def _z_visible(self, *_):
         p = self.get_profile()
