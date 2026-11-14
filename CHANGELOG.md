@@ -1,5 +1,17 @@
 # Novità di FreeLaserCut
 
+## 0.19.4 — 14/11/2026
+Un modello nuovo nel catalogo.
+
+**Sculpfun E1 fra i modelli pronti (67 in tutto).** La serie E1 è un laser chiuso con struttura CoreXY, telecamera nel coperchio e homing. Tre voci, una per modulo laser: **Sculpfun E1 12W**, **Sculpfun E1 Pro 21W** e **Sculpfun E1 3W IR** (il modulo infrarosso IR3). Le versioni «Dual» sono la stessa macchina con il modulo infrarosso nella scatola: i moduli si montano uno alla volta, quindi si sceglie la voce del modulo montato.
+- **Già impostati scegliendo il modello:** area 400 × 320 mm (X è il lato lungo), 36.000 mm/min (i 600 mm/s dichiarati), accelerazione 1000 mm/s², spot 0,04 × 0,06 mm (12 W), 0,06 × 0,08 mm (Pro) e 0,03 × 0,03 mm (infrarosso), 115200 baud. Collegando la macchina, area, velocità e buffer si rileggono dalla scheda come sempre.
+- **Riconosciuto da solo.** *Riconosci la macchina* propone «Sculpfun E1 12W» quando la scheda dice un'area di 400 × 320 mm, anche se non dichiara la marca, e avvisa che il modulo montato non si legge dalla scheda: chi ha il Pro o il modulo infrarosso sceglie quella voce nell'elenco.
+- **La nota del modello dice cosa serve per partire:** chiavetta USB di sicurezza inserita, fungo di emergenza sbloccato, coperchio chiuso, driver CH340; la telecamera ha un cavo USB suo e si sceglie nel pannello Camera; la luce interna si abbassa dalla console con `$light/duty=200` (da 0 a 1000) se abbaglia la calibrazione; i dati della rete Wi-Fi della macchina.
+- **Wi-Fi:** la rete propria «Sculpfun E1» è riconosciuta dalla procedura *Collegamento Wi-Fi del laser* (stessa password e stesso indirizzo delle altre schede: 12345678 e 192.168.4.1).
+- **Da sapere:** il rullo e il mandrino Sculpfun sull'E1 girano sull'asse A, mentre il rotativo di FreeLaserCut usa l'asse Y: non li comanda. Il passaggio da un modulo all'altro è una scelta del modello, non un comando.
+- **Fonti:** pagine ufficiali Sculpfun (area, velocità, potenze, spot), guida ufficiale della serie E1 (moduli, telecamera, luce, rete), e per le impostazioni di fabbrica della scheda la tabella pubblicata da diode-laser-wiki.com, che non è una fonte Sculpfun.
+- **Non provato su una E1 vera.** L'angolo dell'homing non è scritto in nessuna fonte: lo 0 resta davanti a sinistra finché la configurazione guidata non dice altro, ed è la prima cosa da fare alla prima connessione. Non provati nemmeno la telecamera e il Wi-Fi di questa macchina.
+
 ## 0.19.3 — 14/11/2026
 Dai rapporti degli utenti: l'angolo dell'homing. Più quattro cose decise con chi usa il programma.
 

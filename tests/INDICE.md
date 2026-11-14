@@ -1,7 +1,7 @@
 # Prove automatiche di FreeLaserCut, per area
 
 Generato da `tests/run_tests.py` (non modificare a mano): ogni suite sta nell'area della sua descrizione.
-Suite: 142. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
+Suite: 143. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
 
 ## Wi-Fi, rete e telefono (12)
 
@@ -88,7 +88,7 @@ Suite: 142. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v185_aria.py` (Banco): Comando dell'air assist nell'interfaccia Banco
 - `test_v192_g55.py`: Scheda che su G55 tace o risponde con un errore, in verifica e nel lavoro: lavoro fermato e rifatto senza
 
-## Macchina, connessione e profili (34)
+## Macchina, connessione e profili (35)
 
 - `test_v104.py`: Rapporto per l'assistenza, registro della comunicazione, installatore
 - `test_v122.py`: Assi invertibili, velocità in mm/s, MKS DLC32
@@ -124,6 +124,7 @@ Suite: 142. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v193_piano.py`: Piano mostrato ruotato di 90°, angolo dell'homing: «casa» a fine lavoro, angolo scelto nella configurazione guidata, file in coordinate macchina
 - `test_v193_piano.py` (Banco): Piano ruotato e angolo dell'homing nell'interfaccia Banco
 - `test_v193_cerca.py`: Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica
+- `test_v194_sculpfun_e1.py`: Sculpfun E1 nel catalogo: 12 W, Pro 21 W e modulo infrarosso, riconoscimento dall'area di lavoro
 
 ## Disegno e modifica (15)
 

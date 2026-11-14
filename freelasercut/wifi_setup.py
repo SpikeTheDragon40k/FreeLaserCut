@@ -27,7 +27,9 @@ import time
 
 MASK = "********"
 OWN_NET_IP = "192.168.4.1"  # l'indirizzo della scheda quando fa da sé la rete («rete propria»)
-OWN_NET_NAMES = ("MKS_DLC", "FluidNC", "GRBL_ESP", "ESP32", "LONGER", "LASER")  # inizio dei nomi delle reti proprie note
+# inizio dei nomi delle reti proprie note. 0.19.4: «Sculpfun E1» (guida ufficiale della serie E1: password 12345678,
+# indirizzo 192.168.4.1, gli stessi delle schede MKS)
+OWN_NET_NAMES = ("MKS_DLC", "FluidNC", "GRBL_ESP", "ESP32", "LONGER", "LASER", "SCULPFUN")
 OWN_NET_PASSWORD = "12345678"  # quella predefinita delle schede MKS (pubblica, stampata nelle guide)
 PORTS = (8080, 23)  # telnet: MKS / Longer 8080, Grbl_ESP32 / FluidNC 23
 GUEST_WORDS = ("guest", "ospiti", "ospite", "gast", "gäste", "invitados", "invités", "invites", "convidados")

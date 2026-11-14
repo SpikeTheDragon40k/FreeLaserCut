@@ -492,6 +492,7 @@ if __name__ == "__main__":
     run_suite("test_v193_avvio.py", "Avvio robusto: Windows troppo vecchio detto chiaro, icona giusta sulla barra di Windows")
     run_suite("test_v193_cerca.py", "Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica")
     run_suite("test_v193_cerca.py", "Ricerca comandi nell'interfaccia Banco: resta la finestrella", "banco")
+    run_suite("test_v194_sculpfun_e1.py", "Sculpfun E1 nel catalogo: 12 W, Pro 21 W e modulo infrarosso, riconoscimento dall'area di lavoro")
     if "--camera" in sys.argv:
         print("Camera AutoCam (circa 6 minuti)");  test_camera()
     flush()

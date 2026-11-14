@@ -161,6 +161,19 @@ CATALOG = (
     # della Genmitsu 3018-PRO (SOURCES, letta l'11/11/2026): area 300 × 180 mm (Z 45), 1200 mm/min, niente finecorsa;
     # dal manuale ufficiale del kit laser: 5,5 W a 445 nm, fuoco regolabile, $32=1 per il laser. Spot non dichiarato.
     ("Genmitsu CNC 3018-PRO con modulo laser", "SainSmart", 300, 180, "5,5 W", 1200),
+    # 0.19.4: chiesto da Ale. Serie E1 (chiusa, CoreXY, telecamera nel coperchio). Dalle pagine ufficiali Sculpfun
+    # (SOURCES, lette il 14/11/2026): area 400 × 320 mm, 600 mm/s (= 36.000 mm/min), diodo da 12 W con spot
+    # 0,04 × 0,06 mm (E1) o da 21 W con spot 0,06 × 0,08 mm (E1 Pro), modulo infrarosso IR3 da 3 W a 1064 nm con spot
+    # 0,03 × 0,03 mm. Le versioni «Dual» sono la stessa macchina con il modulo IR3 nella scatola: i moduli si montano
+    # uno alla volta (guida ufficiale «E1 Series User Guide», wiki.sculpfun.com), quindi qui il modulo IR è una voce
+    # a sé, come per l'Acmer P3. Dalla tabella delle impostazioni di fabbrica pubblicata da diode-laser-wiki.com
+    # (pagina «Sculpfun E1 Enclosed Laser», firmware del 18/06/2026; non è una fonte Sculpfun): $130=400 e $131=320
+    # (X è il lato lungo), $110/$111=36000, $120/$121=1000, $30=1000, $32=1, homing acceso ($22=1) verso X− e Y−
+    # ($23 con X e Y) con stacco di 1,5 mm, finecorsa veri accesi ($21=1) e limiti software spenti ($20=0).
+    # L'angolo dell'homing non è scritto in nessuna delle fonti: resta quello che si indica nella configurazione guidata.
+    ("Sculpfun E1 12W", "Sculpfun", 400, 320, "12 W", 36000),
+    ("Sculpfun E1 Pro 21W", "Sculpfun", 400, 320, "21 W", 36000),
+    ("Sculpfun E1 3W IR", "Sculpfun", 400, 320, "3 W (infrarosso)", 36000),
 )
 # area dichiarata dal produttore, quando è stata ridotta per prudenza (vedi sopra)
 AREA_NOTE = {
@@ -217,6 +230,9 @@ SOURCES = {
     "Atomstack Swift 7W": "https://atomstack.com/products/atomstack-swift-laser-engraver",
     "Atomstack Swift 12W": "https://atomstack.com/products/atomstack-swift-laser-engraver",
     "Genmitsu CNC 3018-PRO con modulo laser": "https://www.sainsmart.com/products/sainsmart-genmitsu-cnc-router-3018-pro-diy-kit",
+    "Sculpfun E1 12W": "https://www.sculpfun.com/products/sculpfun-e1-enclosed-dual-laser-engraving-machine",
+    "Sculpfun E1 Pro 21W": "https://www.sculpfun.com/products/sculpfun-e1-pro-enclosed-laser-engraving-machine",
+    "Sculpfun E1 3W IR": "https://www.sculpfun.com/products/sculpfun-ir3-3w-infrared-laser-module-for-e1-enclosed-laser-engraver",
 }
 # firmware che rispondono error:20 a G55 (visto nel registro di un Acmer S1, firmware 1.0.4 del 2025)
 NO_G55 = {"Acmer S1 (2,5W / 3,5W / 6W)"}
@@ -262,6 +278,20 @@ for _n in ("Atomstack Swift 7W", "Atomstack Swift 12W"):
                    "impostati scegliendo questo modello. Atomstack non dichiara la velocità massima: qui c'è il valore "
                    "generico di 10.000 mm/min. Collegando la macchina e premendo «Leggi dalla macchina», velocità e area "
                    "vere si leggono dalla scheda (anche con il kit di estensione dell'area).")
+# 0.19.4: la serie E1. Le tre voci sono la stessa macchina con un modulo diverso montato.
+E1 = ("Sculpfun E1 12W", "Sculpfun E1 Pro 21W", "Sculpfun E1 3W IR")
+for _n in E1:
+    NOTES[_n] = tr(
+        "Sculpfun E1 (anche Dual e Pro): scegli la voce del modulo montato adesso (12 W, Pro 21 W o infrarosso "
+        "da 3 W); area 400 × 320 mm e 600 mm/s già impostati. Prima di collegare: chiavetta USB di sicurezza "
+        "inserita nella macchina, fungo di emergenza sbloccato (si gira in senso orario), coperchio chiuso e "
+        "driver CH340 installato, altrimenti la scheda non risponde o il lavoro non parte. All'accensione la "
+        "macchina fa l'homing da sola. La telecamera del coperchio ha un cavo USB suo (quello con due spine "
+        "uguali): collegalo al PC e sceglila nel pannello Camera; se la luce interna abbaglia la calibrazione, "
+        "abbassala dalla console con «$light/duty=200» (da 0 a 1000). Via Wi-Fi: rete «Sculpfun E1», password "
+        "12345678, indirizzo 192.168.4.1, porta 8080. Il rullo e il mandrino Sculpfun girano sull'asse A: il "
+        "rotativo di FreeLaserCut usa l'asse Y e non li comanda. Non ancora provato su una E1 vera: alla prima "
+        "connessione fai la configurazione guidata, che controlla l'angolo dello 0 e il verso delle frecce.")
 # spot del laser (mm) dichiarato dal produttore, dove è diverso dal valore comune (0,08 × 0,10)
 for _n, (_ax, _ay) in AREA_NOTE.items():
     _bx, _by = next((c[2], c[3]) for c in CATALOG if c[0] == _n)
@@ -286,7 +316,8 @@ SPOTS = {"Mecpow X3 5W": (0.05, 0.07), "Mecpow X3 Pro 10W": (0.06, 0.08), "Mecpo
          "Acmer P2 10W": (0.06, 0.08), "Acmer P2 20W": (0.08, 0.10), "Acmer P2 33W": (0.08, 0.10),
          "Acmer P3 24W": (0.06, 0.08), "Acmer P3 48W": (0.08, 0.10), "Acmer P3 2W IR": (0.02, 0.02),
          "Acmer P3 2-in-1 (diodo + IR)": (0.06, 0.04), "Sculpfun C1 3W": (0.04, 0.04), "Sculpfun C1 6W": (0.06, 0.06),
-         "Longer Ray5 40W": (0.10, 0.15), "Atomstack Swift 7W": (0.08, 0.04), "Atomstack Swift 12W": (0.08, 0.04)}
+         "Longer Ray5 40W": (0.10, 0.15), "Atomstack Swift 7W": (0.08, 0.04), "Atomstack Swift 12W": (0.08, 0.04),
+         "Sculpfun E1 12W": (0.04, 0.06), "Sculpfun E1 Pro 21W": (0.06, 0.08), "Sculpfun E1 3W IR": (0.03, 0.03)}
 # velocità della porta seriale dichiarata dal produttore, dove non è la solita (115200)
 BAUD = {"Atomstack Swift 7W": 460800, "Atomstack Swift 12W": 460800}
 # correzione della scansione avanti e indietro dichiarata dal produttore: [velocità mm/min, sfasamento mm]
@@ -296,6 +327,10 @@ _P3_SCAN = [[6000.0, 0.14], [12000.0, 0.16], [18000.0, 0.12], [24000.0, 0.12], [
 SCAN = {n: _P3_SCAN for n in ("Acmer P3 24W", "Acmer P3 48W", "Acmer P3 2W IR", "Acmer P3 2-in-1 (diodo + IR)")}
 ACCEL = {n: 3000.0 for n in SCAN}  # mm/s² dai profili ufficiali Acmer
 ACCEL.update({n: 3000.0 for n in _P2})
+ACCEL.update({n: 1000.0 for n in E1})  # $120/$121 di fabbrica (tabella di diode-laser-wiki.com, vedi CATALOG)
+# famiglie in cui la scheda è la stessa e cambia solo il modulo laser montato, che dalla scheda non si legge: quando
+# l'area letta porta a tutta la famiglia e a nient'altro, il riconoscimento propone la prima voce e lo dice (0.19.4)
+FAMILIES = (E1,)
 # comando che accende l'aria assistita, dove il profilo ufficiale del produttore non usa il solito M8 (0.19.2)
 AIR_ON = {n: "M7" for n in _P2}
 GENERIC = tr("Altro laser GRBL (si legge dalla macchina)")
@@ -427,6 +462,21 @@ def _num(settings, n):
         return None
 
 
+def _family(ident, same):
+    """I modelli con la stessa area sono una famiglia sola (stessa scheda, moduli laser diversi)? Allora propone
+    il primo, lascia gli altri fra i candidati e dice che il modulo va confermato. -> True se l'ha fatto."""
+    fam = next((f for f in FAMILIES if set(same) == set(f)), None)
+    if fam is None:
+        return False
+    ident.model = fam[0]
+    ident.candidates = list(fam)
+    ident.notes.append(("info", tr("{0} riconosciuto dall'area di lavoro. Il modulo laser montato non si legge dalla "
+                                    "scheda: se non è quello da {1}, scegli la voce giusta nell'elenco dei modelli "
+                                    "({2}).", fam[0].rsplit(" ", 1)[0], next(c[4] for c in CATALOG if c[0] == fam[0]),
+                                    ", ".join(fam[1:]))))
+    return True
+
+
 def identify(banner=(), info=(), settings=None, port=None, baud=115200):
     """Mette insieme gli indizi di porta, avvio, $I e $$."""
     settings = settings or {}
@@ -498,7 +548,7 @@ def identify(banner=(), info=(), settings=None, port=None, baud=115200):
             same = [n for n, v, cx, cy, *_ in CATALOG if n in same and gap(n, cx, cy) <= best + 0.5]
         if len(same) == 1:
             ident.model = same[0]
-        elif same:
+        elif same and not _family(ident, same):
             ident.candidates = same
             ident.notes.append(("info", tr("Area di lavoro come: {0}. Scegli il modello giusto nell'elenco.",
                                            ", ".join(same))))
@@ -506,6 +556,9 @@ def identify(banner=(), info=(), settings=None, port=None, baud=115200):
         same = [n for n, v, cx, cy, *_ in CATALOG if abs(bx - cx) <= 2 and abs(by - cy) <= 2]
         if len(same) == 1:
             ident.model = same[0]
+            ident.notes.append(("info", tr("Modello riconosciuto solo dall'area di lavoro ({0:g} × {1:g} mm): "
+                                           "controlla che sia quello giusto.", bx, by)))
+        elif same and _family(ident, same):
             ident.notes.append(("info", tr("Modello riconosciuto solo dall'area di lavoro ({0:g} × {1:g} mm): "
                                            "controlla che sia quello giusto.", bx, by)))
         elif same:
