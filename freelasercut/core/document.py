@@ -695,6 +695,67 @@ def renew_ids(shape):
 
 
 # ======================================================================= documento
+# ---------------------------------------------------------------- piano ruotato: la porta del file (0.19.3)
+# Decisione di Ale (13/11): il disegno è legato al piatto. Il file del progetto resta sempre nelle coordinate della
+# macchina (il «telaio»: X da sinistra, Y dal davanti); se nel profilo il piano è mostrato ruotato, è il programma
+# che lo gira quando apre e lo rigira quando salva. Così un altro FreeLaserCut con il piano non ruotato (o una
+# versione precedente) vede lo stesso progetto com'era, e aprire e salvare senza toccare niente non cambia il file.
+_DOOR = None  # il profilo della macchina in uso (lo imposta la finestra principale); None = piano non ruotato
+
+
+def set_door(profile):
+    global _DOOR
+    _DOOR = profile
+
+
+def plane_transforms(profile):
+    """(telaio → piano, piano → telaio) come QTransform, oppure (None, None) se il piano non è ruotato.
+    Sono rotazioni vere (determinante +1): niente specchi."""
+    rot = getattr(profile, "rot", None)
+    k = rot() if callable(rot) else 0
+    if not k:
+        return None, None
+    w, h = float(profile.bed_x), float(profile.bed_y)
+    if k == 1:  # u = w − y, v = x
+        to_plane = QTransform(0.0, 1.0, -1.0, 0.0, w, 0.0)
+    elif k == 2:  # u = w − x, v = h − y
+        to_plane = QTransform(-1.0, 0.0, 0.0, -1.0, w, h)
+    else:  # u = y, v = h − x
+        to_plane = QTransform(0.0, -1.0, 1.0, 0.0, 0.0, h)
+    to_frame, ok = to_plane.inverted()
+    return (to_plane, to_frame) if ok else (None, None)
+
+
+def _clean(values):
+    """Niente «-0.0» nel file (nasce moltiplicando per le rotazioni): è 0."""
+    return [v + 0.0 for v in values]
+
+
+def _to_file(shape, to_frame):
+    """Dizionario di una forma di primo livello per il file, con la posizione nelle coordinate della macchina.
+    Una forma non toccata da quando è stata aperta ci torna con gli stessi numeri che aveva nel file."""
+    d = shape.to_dict()
+    if to_frame is None:
+        return d
+    now = geom.transform_to_list(shape.tf)
+    kept = getattr(shape, "_door_tf", None)
+    if kept is not None and kept[0] == now:
+        d["tf"] = list(kept[1])
+    else:
+        d["tf"] = _clean(geom.transform_to_list(shape.tf * to_frame))
+    return d
+
+
+def _from_file(shapes, to_plane):
+    """Forme appena lette dal file (coordinate della macchina) → sul piano come si vede."""
+    if to_plane is None:
+        return
+    for s in shapes:
+        in_file = geom.transform_to_list(s.tf)
+        s.set_transform(s.tf * to_plane)
+        s._door_tf = (geom.transform_to_list(s.tf), in_file)
+
+
 class Plate:
     """Un piano di lavoro del progetto: le sue forme. Macchina, piano e livelli (impostazioni di taglio) sono in
     comune a tutti i piani; ogni piano è un lavoro a sé (si incide il piano attivo)."""
@@ -939,16 +1000,28 @@ class Document:
                         self.layers[leaf.layer] = CutSettings.from_dict(d) if d else default_layer(leaf.layer)
         return kept
 
+    def replane(self, tf):
+        """Applica la stessa trasformazione del piano a tutte le forme di tutti i piani di lavoro (0.19.3: il piano
+        mostrato cambia orientamento e il disegno resta dov'è sulla macchina)."""
+        for s in self.all_shapes():
+            s.apply(tf)
+
+    def from_frame(self, shapes=None, door=None):
+        """Forme lette da un file nelle coordinate della macchina (progetti .lbrn2) → sul piano come si vede."""
+        to_plane, _ = plane_transforms(_DOOR if door is None else door)
+        _from_file(self.all_shapes() if shapes is None else shapes, to_plane)
+
     # ---- file
     def save(self, path):
         # "shapes" è il primo piano: le versioni precedenti di FreeLaserCut aprono quello; gli altri piani sono in
         # "plates" (il primo lì ha solo il nome)
+        _, to_frame = plane_transforms(_DOOR)  # 0.19.3: nel file le posizioni sono quelle della macchina
         meta = {"format": "freelasercut", "version": FORMAT_VERSION, "name": self.name,
-                "shapes": [s.to_dict() for s in self.plates[0].shapes],
+                "shapes": [_to_file(s, to_frame) for s in self.plates[0].shapes],
                 "layers": {str(k): v.to_dict() for k, v in self.layers.items()},
                 "variables": variables.to_dict()}
         if len(self.plates) > 1 or self.plates[0].name:
-            meta["plates"] = [{"name": p.name, **({"shapes": [s.to_dict() for s in p.shapes]} if i else {})}
+            meta["plates"] = [{"name": p.name, **({"shapes": [_to_file(s, to_frame) for s in p.shapes]} if i else {})}
                               for i, p in enumerate(self.plates)]
             meta["current"] = self.current
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -986,5 +1059,6 @@ class Document:
                                         str(p.get("name") or "")))
             cur = meta.get("current", 0)
             doc.current = cur if isinstance(cur, int) and 0 <= cur < len(doc.plates) else 0
+        doc.from_frame()  # 0.19.3: il file è nelle coordinate della macchina; con il piano ruotato si gira qui
         doc.path = path
         return doc

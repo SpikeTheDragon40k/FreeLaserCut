@@ -40,6 +40,12 @@ HELP = {
                "Due facce: scegliendo insieme il rame del lato sopra e del lato sotto, ogni faccia va su un suo piano "
                "di lavoro, nella stessa posizione (il lato sotto già specchiato); rimettere la basetta al suo posto "
                "dopo averla girata, con o senza dima, è compito tuo."), None),
+    "import_rot": (tr("Importa ruotato di 90°"),
+                   tr("Come «Importa», ma i disegni entrano girati di un quarto di giro. Serve per i file disegnati "
+                      "nell'altro verso: per esempio un disegno fatto «in verticale» per una macchina lunga e stretta, "
+                      "quando nella configurazione hai scelto di vedere il piano ruotato. I disegni importati con "
+                      "«Importa» entrano sempre dritti come li vedi sullo schermo; i progetti di FreeLaserCut invece "
+                      "sono legati al piatto e si aprono già nel verso giusto."), None),
     "export": (tr("Esporta SVG"), tr("Salva il disegno come SVG, da aprire in Inkscape, Illustrator o altri programmi."), None),
     "save_gcode": (tr("Salva G-code"), tr("Scrive il lavoro in un file G-code (.gcode/.nc) da eseguire dopo o su un'altra macchina."), None),
     "run_file": (tr("Esegui un file G-code"), tr("Invia alla macchina un file G-code già pronto, con anteprima e verifica."), None),
@@ -269,7 +275,11 @@ HELP = {
     "setup_wizard": (tr("Configurazione guidata della macchina"), tr(
         "Poche domande: il modello del laser, l'angolo in cui sta lo 0 della macchina e, con il laser collegato, la "
         "prova delle frecce. Da qui FreeLaserCut ricava il verso degli assi, così la testa e il lavoro compaiono nel "
-        "punto giusto del piano. Compare al primo avvio e si può rifare quando vuoi."), None),
+        "punto giusto del piano. Compare al primo avvio e si può rifare quando vuoi. L'angolo che indichi vale più di "
+        "una prova delle frecce fatta prima: gli assi lo seguono e la prova, rifatta, lo conferma. Un passo chiede anche "
+        "come vuoi vedere il piano: di norma non ruotato; ruotato di 90° a sinistra o a destra solo se la macchina ha un "
+        "lato molto più lungo dell'altro e vuoi disegnare con il lato lungo in orizzontale. Cambia solo come si vede: "
+        "assi, punto zero e file dei progetti restano quelli della macchina."), None),
     "wifi_wizard": (tr("Collegamento Wi-Fi del laser"), tr(
         "Procedura guidata per usare il laser senza cavo. Serve una scheda con il Wi-Fi integrato (ESP32: Makerbase "
         "MKS DLC32, Longer, Sculpfun, Atomstack…). Con il cavo USB (oppure senza cavo, se il laser acceso mostra una "
@@ -314,7 +324,10 @@ HELP = {
         "di aiuto) e aggiornamenti. Sono le stesse dei menu e dei pannelli: cambiando di qua cambia anche di là."), None),
     "palette": (tr("Cerca un comando"), tr(
         "Scrivi una parola (offset, testo, contorno, homing…) e FreeLaserCut trova il comando, in qualsiasi menu sia: "
-        "Invio lo esegue. Senza scrivere niente, in cima ci sono i comandi che hai usato per ultimi."), None),
+        "Invio lo esegue. Senza scrivere niente, in cima ci sono i comandi che hai usato per ultimi. Nell'interfaccia "
+        "classica è la casella con la lente nella barra in basso, accanto a «Griglia»: ci arrivi con un clic, con "
+        "Ctrl+F o con F3; le proposte si aprono verso l'alto, la migliore in cima; le frecce scorrono, Esc chiude. Se "
+        "la finestra è stretta resta solo la lente, che si allarga mentre scrivi."), None),
     "send_report": (tr("Invia un rapporto all'assistenza"), tr("Racconti cosa è successo e FreeLaserCut prepara il rapporto "
                     "con le informazioni tecniche (niente progetti né foto). Lo puoi vedere prima, salvarlo, mandarlo "
                     "con la mail già scritta oppure, se c'è il collegamento, con Invia. Parte solo con il tuo consenso."),

@@ -94,6 +94,91 @@ class CornerPicker(QWidget):
         p.end()
 
 
+ROT_NAMES = {0: tr("non ruotato"), 1: tr("ruotato a sinistra"), 3: tr("ruotato a destra"), 2: tr("capovolto")}
+
+
+class PlanePreview(QWidget):
+    """Il piano come si vedrà sullo schermo con un certo orientamento: il rettangolo con le sue proporzioni, il
+    pallino dello 0 della macchina e le frecce degli assi X e Y (0.19.3)."""
+
+    clicked = Signal()
+    W, H = 150, 118
+
+    def __init__(self, k, parent=None):
+        super().__init__(parent)
+        self.k = int(k)
+        self.prof = None
+        self.on = False
+        self.setFixedSize(self.W, self.H)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def set_machine(self, travel, invert, negative):
+        q = MachineProfile(bed_x=float(travel[0]), bed_y=float(travel[1]), invert_x=bool(invert[0]),
+                           invert_y=bool(invert[1]), negative_space=negative)
+        q.set_view_rot(self.k)
+        self.prof = q
+        self.update()
+
+    def set_on(self, on):
+        self.on = bool(on)
+        self.update()
+
+    def mousePressEvent(self, _e):
+        self.clicked.emit()
+
+    def geometry_now(self):
+        """(rettangolo del piano nel riquadro, punto dello 0, punta della freccia X, punta della freccia Y), in
+        pixel del riquadro; le frecce partono dallo 0 e vanno verso l'interno del piano."""
+        q = self.prof
+        if q is None:
+            return None
+        bw, bh = max(q.bed_x, 1.0), max(q.bed_y, 1.0)
+        k = min((self.W - 36) / bw, (self.H - 36) / bh)
+        r = QRectF((self.W - bw * k) / 2, (self.H - bh * k) / 2, bw * k, bh * k)
+
+        def px(u, v):  # piano (v verso l'alto) → pixel (y verso il basso)
+            return QPointF(r.left() + u * k, r.bottom() - v * k)
+
+        zu, zv = q.home_corner()
+        tips = []
+        for d in ((1.0, 0.0), (0.0, 1.0)):
+            du, dv = q.from_machine_delta(*d)
+            # verso l'interno del piano (con le coordinate negative il verso positivo esce dal piano)
+            if not (-1e-6 <= zu + du * 1e-3 <= bw + 1e-6 and -1e-6 <= zv + dv * 1e-3 <= bh + 1e-6):
+                du, dv = -du, -dv
+            length = min(0.55 * (bw if du else bh), 46 / k)
+            tips.append(px(zu + du * length, zv + dv * length))
+        return r, px(zu, zv), tips[0], tips[1]
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        g = self.geometry_now()
+        if g is None:
+            p.end()
+            return
+        r, zero, tip_x, tip_y = g
+        pal = self.palette()
+        p.setPen(QPen(QColor(C["accent"] if self.on else C["muted"]), 2.5 if self.on else 1.2))
+        p.setBrush(pal.color(QPalette.Base))
+        p.drawRoundedRect(r, 4, 4)
+        p.setFont(style.ui_font(8))
+        for tip, name, col in ((tip_x, "X", "#D9480F"), (tip_y, "Y", "#1971C2")):
+            p.setPen(QPen(QColor(col), 2))
+            p.drawLine(zero, tip)
+            d = tip - zero
+            n = max(abs(d.x()) + abs(d.y()), 1.0)
+            ux, uy = d.x() / n, d.y() / n
+            for sgn in (1, -1):  # punta della freccia
+                p.drawLine(tip, QPointF(tip.x() - 6 * ux + sgn * 4 * uy, tip.y() - 6 * uy - sgn * 4 * ux))
+            p.drawText(QRectF(tip.x() + 8 * ux - 8 + 6 * abs(uy), tip.y() + 8 * uy - 8 + 0 * abs(ux), 16, 16),
+                       Qt.AlignCenter, name)
+        p.setPen(QPen(QColor(C["accent_hi"]), 2))
+        p.setBrush(QColor(C["accent_hi"]))
+        p.drawEllipse(zero, 4, 4)
+        p.end()
+
+
 def _title(text):
     lab = QLabel(f"<b>{text}</b>")
     lab.setStyleSheet("font-size: 13pt;")
@@ -119,6 +204,7 @@ class SetupWizard(QDialog):
         self.tested = [bool(p.tested_x or p.axes_tested), bool(p.tested_y or p.axes_tested)]
         self.inv = [p.invert_x, p.invert_y]
         self._sign_before = tuple(getattr(main.ctl, "axis_sign", (1.0, 1.0)))
+        self._rot_before = int(getattr(main.ctl, "axis_rot", 0) or 0)
         v = QVBoxLayout(self)
         self.step_lab = QLabel()
         self.step_lab.setObjectName("muted")
@@ -128,6 +214,7 @@ class SetupWizard(QDialog):
         self._page_model(p)
         self._page_corner(p)
         self._page_arrows()
+        self._page_rotation(p)
         self._page_end()
         row = QHBoxLayout()
         self.b_skip = QPushButton(tr("Più tardi") if first else tr("Annulla"))
@@ -212,9 +299,21 @@ class SetupWizard(QDialog):
         self.stack.addWidget(w)
 
     def _corner_changed(self, c):
+        note = ""
         if self.picker.touched:
             self._unknown = False
-        self.corner_lab.setText(tr("Lo 0 è {0}.", corner_name(c)))
+            # 0.19.3 (rapporti del 14/11, Falcon A1): l'angolo indicato adesso vale più di una prova delle frecce
+            # fatta prima. Fino alla 0.19.2 gli assi «provati» restavano com'erano e l'angolo scelto veniva ignorato
+            # in silenzio: lo 0 tornava sempre dov'era. L'asse che cambia torna «da provare»: le frecce lo confermano.
+            neg = self.main.profile.negative_space if self._same_model() else None
+            want = MachineProfile.corner_inversion(c, neg)
+            changed = [a for a in (0, 1) if self.tested[a] and bool(self.inv[a]) != bool(want[a])]
+            for a in changed:
+                self.inv[a] = bool(want[a])
+                self.tested[a] = False
+            if changed:
+                note = " " + tr("Gli assi seguono questo angolo: al passo dopo confermali con la prova delle frecce.")
+        self.corner_lab.setText(tr("Lo 0 è {0}.", corner_name(c)) + note)
 
     def _dont_know(self):
         """«Non lo so»: propongo davanti a sinistra ma non lo do per vero (il verso degli assi resta com'è finché non
@@ -259,6 +358,74 @@ class SetupWizard(QDialog):
         self.main.ctl.error_raised.connect(self._jog_refused)
         v.addStretch(1)
         self.stack.addWidget(w)
+
+    def _page_rotation(self, p):
+        """0.19.3 — da dove guardi il piatto. Dopo assi e punto zero: cambia solo come si vede il piano."""
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(_title(tr("Come vuoi vedere il piano?")))
+        v.addWidget(_text(tr("<b>Di norma non serve ruotare il piano.</b> Usalo solo se la tua macchina ha un lato molto "
+                             "più lungo dell'altro e vuoi disegnare con il lato lungo in orizzontale. Cambia solo come "
+                             "vedi il piano: assi, punto zero e file restano quelli della macchina.")))
+        row = QHBoxLayout()
+        self.rot_group = QButtonGroup(self)
+        self.rot_radio, self.rot_prev = {}, {}
+        for k, text in ((0, tr("Non ruotato (consigliato)")), (1, tr("Ruotato a sinistra")), (3, tr("Ruotato a destra"))):
+            col = QVBoxLayout()
+            prev = PlanePreview(k)
+            b = QRadioButton(text)
+            prev.clicked.connect(lambda bb=b: bb.setChecked(True))
+            b.toggled.connect(lambda _on=False: self._rotation_changed())
+            self.rot_group.addButton(b)
+            col.addWidget(prev, 0, Qt.AlignHCenter)
+            col.addWidget(b, 0, Qt.AlignHCenter)
+            row.addLayout(col)
+            self.rot_radio[k], self.rot_prev[k] = b, prev
+        v.addLayout(row)
+        self.rot_lab = _text("")
+        v.addWidget(self.rot_lab)
+        note = _text(tr("Con il piano ruotato: le righe di riempimenti e immagini seguono lo schermo, quindi corrono lungo "
+                        "l'asse lungo della macchina (per i riempimenti puoi rimetterle sull'altro asse con «Angolo di "
+                        "scansione» a 90°); il rotativo non si può usare; cambiando orientamento la cronologia di "
+                        "Annulla del disegno aperto si azzera."))
+        note.setObjectName("muted")
+        v.addWidget(note)
+        v.addStretch(1)
+        self.stack.addWidget(w)
+        k0 = p.rot() if p.rot() in self.rot_radio else 0
+        self.rot_radio[k0].setChecked(True)
+
+    def rot_choice(self):
+        return next((k for k, b in self.rot_radio.items() if b.isChecked()), 0)
+
+    def _wizard_travel(self):
+        """Corse della macchina scelta nel primo passo."""
+        if self._same_model():
+            return self.main.profile.travel()
+        pre = machines.preset_profile(self.model.currentText())
+        return pre.travel()
+
+    def _enter_rotation(self):
+        same = self._same_model()
+        neg = self.main.profile.negative_space if same else None
+        inv = self._final_axes()
+        for prev in self.rot_prev.values():
+            prev.set_machine(self._wizard_travel(), inv, neg)
+        self._rotation_changed()
+
+    def _rotation_changed(self):
+        if not hasattr(self, "rot_lab"):
+            return
+        k = self.rot_choice()
+        for kk, prev in self.rot_prev.items():
+            prev.set_on(kk == k)
+        tx, ty = self._wizard_travel()
+        w, h = (ty, tx) if k % 2 else (tx, ty)
+        if k:
+            self.rot_lab.setText(tr("Sullo schermo il piano sarà largo {0:g} mm e alto {1:g} mm. Il pallino è lo 0 della "
+                                    "macchina; le frecce sono i suoi assi X e Y.", w, h))
+        else:
+            self.rot_lab.setText(tr("Il piano resta com'è: largo {0:g} mm e alto {1:g} mm.", w, h))
 
     def _page_end(self):
         w = QWidget()
@@ -305,6 +472,8 @@ class SetupWizard(QDialog):
         if i == 2:
             self._enter_arrows()
         if i == 3:
+            self._enter_rotation()
+        if i == self.stack.count() - 1:
             self._fill_summary()
         self.stack.setCurrentIndex(i)
         self.step_lab.setText(tr("Passo {0} di {1}", i + 1, self.stack.count()))
@@ -340,6 +509,7 @@ class SetupWizard(QDialog):
 
     def _apply_sign(self):
         self.main.ctl.axis_sign = (-1.0 if self.inv[0] else 1.0, -1.0 if self.inv[1] else 1.0)
+        self.main.ctl.axis_rot = 0  # le frecce di questa prova sono quelle della macchina: sinistra, destra, fondo
 
     def _alarm(self):
         return self.main.ctl.last_status.get("state") == "Alarm"
@@ -412,7 +582,8 @@ class SetupWizard(QDialog):
         self.summary.setText(tr("<b>Macchina:</b> {0}<br><b>Lo 0 è</b> {1}.<br><b>Assi:</b> X {2}, Y {3} ({4}).",
                                 self.main.profile.name if self._same_model() else self.model.currentText(), corner_name(corner),
                                 tr("invertito") if ix else tr("normale"), tr("invertito") if iy else tr("normale"),
-                                tested))
+                                tested)
+                             + "<br>" + tr("<b>Piano:</b> {0}.", ROT_NAMES.get(self.rot_choice(), ROT_NAMES[0])))
 
     def help_level_choice(self):
         return next((lv for lv, b in self.levels.items() if b.isChecked()), "normale")
@@ -427,6 +598,7 @@ class SetupWizard(QDialog):
     def reject(self):
         self._disconnect()
         self.main.ctl.axis_sign = self._sign_before
+        self.main.ctl.axis_rot = self._rot_before
         super().reject()
 
     def accept(self):
@@ -451,11 +623,16 @@ class SetupWizard(QDialog):
             p.origin_corner = self.picker.corner  # serve per gli assi non provati, quando l'homing dirà di più
         elif self._unknown:
             p.origin_corner = ""
+        busy = bool(main.ctl.job_active or main.ctl.checking)
+        if not busy:  # 0.19.3: mai cambiare orientamento del piano con un lavoro in corso
+            p.set_view_rot(self.rot_choice())
         try:
             p.save()
         except OSError:
             pass
         main._sync_axes()
+        main.plane_changed()  # il disegno aperto resta dov'è sulla macchina
+        main.machine.refresh_profile()
         main.qs.setValue("setup_wizard_done", True)
         main.set_help_level(self.help_level_choice(), quiet=True)
         main.statusBar().showMessage(tr("Configurazione salvata: {0}, lo 0 è {1}", p.name, corner_name(p.corner_now())),

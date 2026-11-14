@@ -1,5 +1,36 @@
 # Novità di FreeLaserCut
 
+## 0.19.3 — 14/11/2026
+Dai rapporti degli utenti: l'angolo dell'homing. Più quattro cose decise con chi usa il programma.
+
+**L'angolo dell'homing non è sempre davanti a sinistra (rapporti del 13 e 14/11: OMTech K40 Plus e Creality Falcon A1).**
+- **A fine lavoro la testa torna dove fa l'homing la tua macchina.** Con le coordinate assolute, finito il lavoro la testa andava sempre nell'angolo davanti a sinistra, anche sulle macchine che hanno lo 0 altrove: sul K40 del rapporto (homing dietro a sinistra) finiva nell'angolo opposto, con `G0 X10 Y190`. Ora va a 10 mm dall'angolo dell'homing: su quel K40 `G0 X10 Y10`. Sulle macchine con lo 0 davanti a sinistra (Longer B1 e la maggior parte dei laser a diodo) non cambia niente.
+  - Con le schede che contano in negativo (GRBL classico) l'angolo giusto dipende dal verso dell'homing (`$23`): FreeLaserCut lo usa se l'ha letto dalla scheda; se non lo conosce resta davanti a sinistra, come prima.
+- **Configurazione guidata: l'angolo che indichi adesso vale.** Se gli assi risultavano già «provati con le frecce», l'angolo scelto dopo veniva ignorato senza dirlo: sul Falcon A1 del rapporto lo 0 tornava sempre davanti a sinistra anche scegliendo «dietro a sinistra». Ora gli assi seguono l'angolo indicato, quelli che cambiano tornano «da provare» e la finestra lo dice; la prova delle frecce fatta dopo ha sempre l'ultima parola.
+- **Il pallino verde dello 0 sul piano è nell'angolo dell'homing**, non più sempre in basso a sinistra.
+- **Non provato su quelle due macchine**: le correzioni vengono dai dati dei rapporti (profilo e impostazioni della scheda).
+
+**Piano mostrato ruotato di 90° (chiesto da un'utente con un laser 400 × 920 mm).** Chi ha una macchina con un lato molto più lungo dell'altro può vedere e disegnare il piano con il lato lungo in orizzontale, per esempio per le scritte.
+- Si sceglie nella **Configurazione guidata della macchina**, in un passo nuovo dopo assi e punto zero: «Non ruotato (consigliato)», «Ruotato a sinistra», «Ruotato a destra», con un disegnino che mostra dove finiscono lo 0 e gli assi X e Y. Lo stesso passo dice che di norma non serve.
+- **Cambia solo da dove guardi il piatto.** Assi, punto zero, frecce della prova e file restano quelli della macchina. È una rotazione vera, mai uno specchio: le scritte non escono rovesciate.
+- **I progetti restano nelle coordinate della macchina**: un progetto fatto «in verticale» si apre già girato nel verso giusto, e salvandolo il file non cambia. Chi lo apre con il piano non ruotato (o con una versione precedente) lo vede com'era. Anche il file del profilo tiene l'area della macchina.
+- I disegni importati (SVG, DXF, immagini) entrano dritti come li vedi; per quelli fatti nell'altro verso c'è **File → Importa ruotato di 90°**. L'SVG esportato esce come lo vedi.
+- Sul piano due freccette dicono dove vanno gli assi X e Y della macchina. Le frecce del movimento seguono lo schermo. Nel pannello Macchina l'area resta quella della macchina.
+- **Da sapere con il piano ruotato:** le righe di riempimenti e immagini seguono lo schermo, quindi corrono lungo l'asse lungo della macchina (per i riempimenti «Angolo di scansione» a 90° le rimette sull'altro); il rotativo non si può usare (il lavoro lo dice ed esce senza); la calibrazione della telecamera va rifatta dopo aver cambiato orientamento; cambiando orientamento la cronologia di Annulla del disegno aperto si azzera.
+- **Non provato su un laser vero.** Sul simulatore un lavoro con il piano ruotato brucia nel punto giusto e torna vicino allo 0.
+
+**Casella «Cerca un comando» nella barra in basso (interfaccia classica).** La ricerca dei comandi non è più una finestrella da aprire: è una casella sempre visibile accanto a «Griglia».
+- Un clic, **Ctrl+F** o **F3** portano lì. Le proposte si aprono verso l'alto, la migliore in cima; frecce per scorrere, Invio esegue, Esc chiude. Con la casella vuota compaiono gli ultimi 6 comandi usati.
+- Sulle finestre strette resta solo una lente, che si allarga mentre scrivi: i messaggi della barra non perdono spazio.
+- Nel Banco la ricerca resta la finestrella di sempre.
+
+**Windows 10 troppo vecchio: adesso viene detto.** FreeLaserCut funziona da Windows 10 versione 1809 in poi (o Windows 11). Su un Windows 10 mai aggiornato (visto: build 10240, del 2015) non partiva e l'unica traccia era un errore tecnico. Ora all'avvio una finestra dice che Windows va aggiornato e come farlo.
+
+**Fissato sulla barra delle applicazioni di Windows tiene la sua icona.** Fissando FreeLaserCut aperto compariva l'icona di Python, e quell'icona poteva non riaprire il programma. Ora FreeLaserCut dice a Windows come rilanciarlo e con quale icona. Chi l'aveva già fissato deve togliere l'icona vecchia e fissarlo di nuovo.
+- **Non provato su un Windows vero prima della pubblicazione**: lo controlla la prova di avvio su GitHub («barra di Windows: ok»).
+
+Prove automatiche nuove: `tests/test_v193_piano.py` (90 controlli in Classica, 86 nel Banco), `tests/test_v193_avvio.py` (45), `tests/test_v193_cerca.py` (42 in Classica, 2 nel Banco).
+
 ## 0.19.2 — 13/11/2026
 Correzione al Wi-Fi dopo la prova su un Longer B1 vero.
 - **Laser Longer (firmware LGT): ora la procedura Wi-Fi li porta davvero in rete.** Sul B1 la procedura scriveva nome e password, riavviava la scheda e dopo 30 secondi diceva «Non so se si è collegata»: la scheda ripartiva con il Wi-Fi spento. Su quella scheda il Wi-Fi si accende con un'impostazione, `$50` (0 = spento, 2 = rete di casa), mentre il comando che FreeLaserCut mandava («rete di casa») riceve «ok» ma non accende niente. Adesso, quando dopo il riavvio la scheda dice «WiFi Off», la procedura manda anche `$50=2`: la scheda si collega subito e la procedura le chiede l'indirizzo. Una volta in rete ci resta: alla riaccensione si ricollega da sola.

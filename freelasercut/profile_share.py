@@ -33,11 +33,13 @@ RANGES = {
 }
 TEXT_MAX = 120
 # legati alla singola macchina di chi esporta: si riparte da zero
-RESET = {"tested_x": False, "tested_y": False, "axes_tested": False, "negative_space": None, "origin_corner": ""}
+RESET = {"tested_x": False, "tested_y": False, "axes_tested": False, "negative_space": None, "origin_corner": "",
+         "view_rot": 0}  # 0.19.3: anche da dove si guarda il piano è una scelta di chi usa la macchina
 
 
 def export_profile(profile, path):
-    data = asdict(profile)
+    # 0.19.3: file_dict() dà l'area della macchina (corse X e Y) anche se chi esporta ha il piano ruotato
+    data = profile.file_dict() if hasattr(profile, "file_dict") else asdict(profile)
     for k in RESET:  # chi importa deve provarli sulla sua macchina
         data.pop(k, None)
     doc = {"freelasercut_profile": FORMAT, "exported_by": f"FreeLaserCut {__version__}", "profile": data}

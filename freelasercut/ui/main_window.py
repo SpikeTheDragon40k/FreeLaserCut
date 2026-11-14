@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, self._profile_bed_fixed)
         self.editor = Editor(Document())
         self.canvas = Canvas(self.editor, (self.profile.bed_x, self.profile.bed_y))
+        self.plane_changed()  # 0.19.3: il file dei progetti è nelle coordinate della macchina (piano ruotato)
         self.bed = self.canvas  # compatibilità con il pannello Camera
         self.job = None
         self.job_preview = None
@@ -204,6 +205,9 @@ class MainWindow(QMainWindow):
             "save": A(tr("Salva"), self.file_save, "Ctrl+S", "save"),
             "save_as": A(tr("Salva con nome…"), self.file_save_as, "Ctrl+Shift+S"),
             "import": A(tr("Importa…"), self.file_import, "Ctrl+I", "import", "SVG, DXF, PNG, JPG, BMP…"),
+            "import_rot": A(tr("Importa ruotato di 90°…"), lambda: self.file_import(turn=True), None, "import",
+                            tr("Come «Importa», ma il disegno entra girato di un quarto di giro: per i file disegnati "
+                               "nell'altro verso (per esempio in verticale, se il tuo piano è mostrato ruotato)")),
             "export": A(tr("Esporta SVG…"), self.file_export, "Ctrl+Shift+E", "export"),
             "save_gcode": A(tr("Salva G-code…"), self.save_gcode, "Ctrl+Shift+G", "gcode"),
             "run_file": A(tr("Esegui un file G-code…"), self.run_gcode_file, None, "open"),
@@ -516,7 +520,7 @@ class MainWindow(QMainWindow):
                     m.addAction(a[k])
             return m
 
-        self.m_file = menu(tr("&File"), ["new", "open", "-", "save", "save_as", "-", "import", "export", "-", "save_gcode",
+        self.m_file = menu(tr("&File"), ["new", "open", "-", "save", "save_as", "-", "import", "import_rot", "export", "-", "save_gcode",
                                      "run_file", "-", "quit"])
         self.m_recent = QMenu(tr("File recenti"), self)
         self.m_file.insertMenu(a["save"], self.m_recent)
@@ -608,11 +612,15 @@ class MainWindow(QMainWindow):
     def _build_classic_palette(self):
         """0.19.2: la ricerca dei comandi (Ctrl+F / F3), che c'era solo nel Banco, anche nell'interfaccia classica:
         stessa finestrella, stesso tasto, stessi comandi (li legge dai menu)."""
-        from .banco import PALETTE_QSS, CommandPalette
+        from .cmd_box import CommandBox
 
-        self.cmd_palette = CommandPalette(self)
-        self.cmd_palette.setStyleSheet(PALETTE_QSS)
-        act = self._a(tr("Cerca un comando…"), self.cmd_palette.open, ["Ctrl+F", "F3"], "zoom_in",
+        # 0.19.3: non più una finestrella al centro ma una casella fissa nella barra in basso, dopo «Griglia»:
+        # si vede sempre, e Ctrl+F / F3 portano il cursore lì
+        self.cmd_palette = CommandBox(self)
+        # posto nella barra: dopo il pulsante del laser (0), «Rotativo attivo» (1) e i due agganci (2), prima di
+        # «F … potenza» (una prova controlla che sia proprio lì)
+        self.statusBar().insertPermanentWidget(3, self.cmd_palette.holder)
+        act = self._a(tr("Cerca un comando…"), self.cmd_palette.open, ["Ctrl+F", "F3"], "search",
                       tr("Scrivi una parola e trovi il comando, in qualsiasi menu sia"))
         self.acts["palette"] = act
         first = self.m_help.actions()[0] if self.m_help.actions() else None
@@ -1309,6 +1317,7 @@ class MainWindow(QMainWindow):
                 from ..core import lbrn
 
                 doc, warnings = lbrn.load(path)
+                doc.from_frame()  # 0.19.3: un progetto è legato al piatto; con il piano ruotato si vede ruotato
             else:
                 doc = Document.load(path)
         except Exception as exc:  # noqa: BLE001
@@ -1376,12 +1385,13 @@ class MainWindow(QMainWindow):
                 a.triggered.connect(lambda _=False, p=p: self.file_open(p))
         self.m_recent.setEnabled(bool(self.m_recent.actions()))
 
-    def file_import(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, tr("Importa"), self.qs.value("import_dir", os.path.expanduser("~")),
-                                                IMPORT_FILTER)
+    def file_import(self, turn=False):
+        """turn=True (0.19.3, «Importa ruotato di 90°»): i disegni entrano girati di un quarto di giro."""
+        paths, _ = QFileDialog.getOpenFileNames(self, tr("Importa ruotato di 90°") if turn else tr("Importa"),
+                                                self.qs.value("import_dir", os.path.expanduser("~")), IMPORT_FILTER)
         if paths:
             self.qs.setValue("import_dir", os.path.dirname(paths[0]))
-            self.import_files(paths)
+            self.import_files(paths, turn=bool(turn))
 
     def import_gerber(self, paths, opts=None):
         """File Gerber/Excellon di una basetta (0.18.3): insieme, perché restino a registro. Ritorna le forme pronte
@@ -1446,7 +1456,13 @@ class MainWindow(QMainWindow):
 
             QMessageBox.information(self, tr("Circuito stampato a due facce"), two_sided_text(*self.gerber_plates))
 
-    def import_files(self, paths, at=None, gerber_opts=None):
+    def import_turn(self):
+        """Quarti di giro (antiorari) di «Importa ruotato di 90°»: lo stesso verso del piano mostrato, così un disegno
+        fatto «in verticale» per la macchina entra dritto su un piano ruotato; con il piano non ruotato è un quarto
+        di giro a sinistra."""
+        return self.profile.rot() or 1
+
+    def import_files(self, paths, at=None, gerber_opts=None, turn=False):
         doc = self.editor.doc
         added = []
         self._import_note = ""
@@ -1475,6 +1491,7 @@ class MainWindow(QMainWindow):
                 except Exception as exc:  # noqa: BLE001
                     QMessageBox.warning(self, tr("Importa"), tr("Non riesco a importare {0}:\n{1}", os.path.basename(p), exc))
                     continue
+                doc.from_frame(shapes)  # 0.19.3: posizioni della macchina → piano come si vede
                 self.editor.add(shapes, tr("Importa progetto .lbrn2"))  # posizioni originali, come nel progetto
                 continue
             if ext in (".gcode", ".nc", ".gc", ".ngc"):
@@ -1489,6 +1506,12 @@ class MainWindow(QMainWindow):
             added += shapes
         if not added:
             return
+        if turn:  # 0.19.3: girati tutti insieme attorno all'origine, poi centrati come sempre
+            from PySide6.QtGui import QTransform as _QT
+
+            ops.transform_all(added, _QT().rotate(90.0 * self.import_turn()))
+            if self._gerber_bottom:
+                ops.transform_all(self._gerber_bottom, _QT().rotate(90.0 * self.import_turn()))
         b = ops.union_bounds(added)
         target = at if at is not None else QPointF(self.profile.bed_x / 2, self.profile.bed_y / 2)
         from PySide6.QtGui import QTransform
@@ -2134,6 +2157,7 @@ class MainWindow(QMainWindow):
                 # ricalcolo il verso degli assi NON provati con le frecce (quelli provati restano)
                 if p.recompute_untested_axes():
                     self._sync_axes()
+                self._machine_marks()  # 0.19.3: ora si sa da che parte contano le coordinate: lo 0 va al suo angolo
                 if self.ctl.port != SIM_PORT:  # 0.17.6: con il simulatore non si salva (e allo stacco si ricarica)
                     try:
                         p.save()
@@ -2555,6 +2579,80 @@ class MainWindow(QMainWindow):
         self._sync_axes()
         if (self.canvas.bed_x, self.canvas.bed_y) != (p.bed_x, p.bed_y):
             self.canvas.set_bed(p.bed_x, p.bed_y)
+        self.plane_changed()
+
+    def pin_identity(self):
+        """Windows: scrive sulla finestra come rilanciare FreeLaserCut e con quale icona, così fissandolo sulla barra
+        delle applicazioni non compare «pythonw.exe» con l'icona di Python. -> True se Windows ha accettato."""
+        try:
+            from .. import taskbar
+
+            return taskbar.set_relaunch(int(self.winId()))
+        except Exception:  # noqa: BLE001 — è solo l'icona sulla barra
+            return False
+
+    def _machine_marks(self):
+        """Pallino verde dello 0 della macchina (e freccette degli assi con il piano ruotato) al posto giusto."""
+        p = self.profile
+        # il pallino è «casa», l'angolo dove l'homing lascia la testa (con le coordinate positive coincide con lo 0)
+        self.canvas.set_machine_marks(p.home_corner(), p.from_machine_delta(1.0, 0.0), p.from_machine_delta(0.0, 1.0),
+                                      p.rot())
+
+    @staticmethod
+    def _plane_state(p):
+        rot = getattr(p, "rot", None)
+        return (rot() if callable(rot) else 0, float(p.bed_x), float(p.bed_y))
+
+    def plane_changed(self):
+        """0.19.3 — piano ruotato. Da chiamare ogni volta che il profilo in uso cambia (un altro profilo, l'area,
+        l'orientamento scelto nella configurazione guidata). Il disegno è legato al piatto: se il piano mostrato ha
+        cambiato orientamento (o misura, mentre è ruotato), le forme aperte si rigirano per restare dove sono sulla
+        macchina. Non è una modifica del progetto: il file resta nelle coordinate della macchina.
+        -> True se il disegno è stato rigirato."""
+        from ..core import document as docmod
+
+        p = self.profile
+        docmod.set_door(p)
+        before, now = getattr(self, "_plane_was", None), self._plane_state(p)
+        self._plane_was = now
+        from .. import camera_calib
+
+        camera_calib.PLANE_ROT = now[0]
+        cam = getattr(self, "camera", None)
+        if cam is not None and before is not None and before[0] != now[0]:
+            # la calibrazione della telecamera e la foto dal telefono valgono per il piano com'era
+            had = cam.model is not None or getattr(cam, "phone_top", None) is not None
+            cam.model, cam.saved, cam.phone_top, cam.phone_corners = None, None, None, None
+            self.canvas.clear_camera()
+            cam.update_state()
+            if had:
+                self.statusBar().showMessage(tr("Il piano ha cambiato orientamento: la calibrazione della telecamera "
+                                                "va rifatta"), 12000)
+        if (self.canvas.bed_x, self.canvas.bed_y) != (p.bed_x, p.bed_y):
+            self.canvas.set_bed(p.bed_x, p.bed_y)
+        self._machine_marks()
+        if before is None or before == now or not (before[0] or now[0]):
+            self.canvas.viewport().update()
+            return False
+        old = MachineProfile(bed_x=before[1], bed_y=before[2], view_rot=before[0])
+        _, to_frame = docmod.plane_transforms(old)
+        to_plane, _ = docmod.plane_transforms(p)
+        tf = (to_frame or QTransform()) * (to_plane or QTransform())
+        if tf.isIdentity():
+            return False
+        ed = self.editor
+        dirty = ed.dirty
+        ed._pending = None
+        ed.doc.replane(tf)
+        ed._hist = {}  # i passi di prima sono nelle coordinate del piano di prima: non si possono più annullare
+        ed.dirty = dirty
+        ed.history_changed.emit()
+        ed.selection_changed.emit()
+        ed.changed.emit()
+        ed.dirty = dirty
+        self._update_title()
+        self.canvas.fit_bed()
+        return True
 
     def _placement_changed(self):
         """Partenza o punto di riferimento cambiati: rifà l'anteprima, così sul piano si vede dove inciderà."""
@@ -2582,7 +2680,9 @@ class MainWindow(QMainWindow):
         """Spunte «Inverti l'asse X/Y» del pannello Laser ↔ profilo della macchina, e verso dei jog."""
         p = self.profile
         self.ctl.axis_sign = p.axis_sign()
+        self.ctl.axis_rot = p.rot()  # 0.19.3: le frecce seguono il piano come si vede
         self.ctl.air_cmds = p.air_cmds()
+        self._machine_marks()
         lp = getattr(self, "laser", None)
         if lp is None or not hasattr(lp, "inv_x"):
             return
@@ -3196,7 +3296,7 @@ class MainWindow(QMainWindow):
         with open(path, encoding="utf-8", errors="replace") as fh:
             lines = fh.read().splitlines()
         pv = gcode_preview.parse(lines, profile=self.profile)
-        gcode.flip_preview(pv, self.profile.invert_x, self.profile.invert_y)  # assi invertiti: piano = origine - uscita
+        gcode.unmap_preview(pv, self.profile)  # assi invertiti: piano = origine - uscita; 0.19.3: piano ruotato
         off = self.work_origin_on_bed()
         self.canvas.set_preview(pv, off)
         if not self.ctl.connected:
@@ -3964,6 +4064,7 @@ def main(app=None, splash=None):
         sys.exit(1)
     win.show()
     startup_guard.done()  # 0.18.16: la finestra c'è, l'avvio è finito (il segno dell'avvio in corso si toglie)
+    win.pin_identity()  # 0.19.3: fissata sulla barra di Windows tiene l'icona e riapre FreeLaserCut
     if splash is not None:
         splash.finish(win)
     listener = getattr(app, "_flc_single", None)

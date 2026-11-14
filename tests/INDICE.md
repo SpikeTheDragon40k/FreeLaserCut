@@ -1,7 +1,7 @@
 # Prove automatiche di FreeLaserCut, per area
 
 Generato da `tests/run_tests.py` (non modificare a mano): ogni suite sta nell'area della sua descrizione.
-Suite: 137. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
+Suite: 142. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
 
 ## Wi-Fi, rete e telefono (12)
 
@@ -88,7 +88,7 @@ Suite: 137. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v185_aria.py` (Banco): Comando dell'air assist nell'interfaccia Banco
 - `test_v192_g55.py`: Scheda che su G55 tace o risponde con un errore, in verifica e nel lavoro: lavoro fermato e rifatto senza
 
-## Macchina, connessione e profili (31)
+## Macchina, connessione e profili (34)
 
 - `test_v104.py`: Rapporto per l'assistenza, registro della comunicazione, installatore
 - `test_v122.py`: Assi invertibili, velocità in mm/s, MKS DLC32
@@ -121,6 +121,9 @@ Suite: 137. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v1816_cnc3018.py`: CNC 3018 con il laser al posto del mandrino (Genmitsu 3018-PRO) nel catalogo
 - `test_v192_g55.py` (Banco): Scheda senza G55 nell'interfaccia Banco
 - `test_v192_acmer_p2.py`: Acmer P2 da 10, 20 e 33 W nel catalogo dei modelli: dati ufficiali, riconoscimento della scheda
+- `test_v193_piano.py`: Piano mostrato ruotato di 90°, angolo dell'homing: «casa» a fine lavoro, angolo scelto nella configurazione guidata, file in coordinate macchina
+- `test_v193_piano.py` (Banco): Piano ruotato e angolo dell'homing nell'interfaccia Banco
+- `test_v193_cerca.py`: Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica
 
 ## Disegno e modifica (15)
 
@@ -140,7 +143,7 @@ Suite: 137. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v190_interfaccia.py` (Banco): Strumento bloccato e linguette nell'interfaccia Banco
 - `test_v192_analisi.py` (Banco): Banco sugli schermi piccoli, avvio fermo al suo posto, barra della selezione, ricerca e Preferenze
 
-## Interfaccia (15)
+## Interfaccia (17)
 
 - `test_v06.py`: Lingue: inglese, italiano, spagnolo, francese, portoghese
 - `test_v07.py`: Interfaccia Banco: ricerca comandi, strati, percorso, menu radiale, cabina, Officina
@@ -157,6 +160,8 @@ Suite: 137. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v192_strumenti.py`: Barra degli strumenti: pulsante Strumenti e comando unico per MakerHub
 - `test_v192_strumenti.py` (Banco): Menu Strumenti e comando unico per MakerHub nell'interfaccia Banco
 - `test_v192_analisi.py` (chiaro): Tema chiaro: testi leggibili sulle righe selezionate
+- `test_v193_avvio.py`: Avvio robusto: Windows troppo vecchio detto chiaro, icona giusta sulla barra di Windows
+- `test_v193_cerca.py` (Banco): Ricerca comandi nell'interfaccia Banco: resta la finestrella
 
 ## Avvio, installazione, aggiornamenti e assistenza (9)
 

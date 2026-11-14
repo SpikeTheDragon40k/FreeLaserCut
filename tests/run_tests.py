@@ -487,6 +487,11 @@ if __name__ == "__main__":
     run_suite("test_v192_analisi.py", "Scorciatoie valide, ordine dei tagli, preparazione del lavoro con Annulla, materiali per potenza, Preferenze, ricerca comandi, anteprime")
     run_suite("test_v192_analisi.py", "Banco sugli schermi piccoli, avvio fermo al suo posto, barra della selezione, ricerca e Preferenze", "banco")
     run_suite("test_v192_analisi.py", "Tema chiaro: testi leggibili sulle righe selezionate", "chiaro")
+    run_suite("test_v193_piano.py", "Piano mostrato ruotato di 90°, angolo dell'homing: «casa» a fine lavoro, angolo scelto nella configurazione guidata, file in coordinate macchina")
+    run_suite("test_v193_piano.py", "Piano ruotato e angolo dell'homing nell'interfaccia Banco", "banco")
+    run_suite("test_v193_avvio.py", "Avvio robusto: Windows troppo vecchio detto chiaro, icona giusta sulla barra di Windows")
+    run_suite("test_v193_cerca.py", "Ricerca comandi: casella «Cerca un comando» nella barra in basso della classica")
+    run_suite("test_v193_cerca.py", "Ricerca comandi nell'interfaccia Banco: resta la finestrella", "banco")
     if "--camera" in sys.argv:
         print("Camera AutoCam (circa 6 minuti)");  test_camera()
     flush()

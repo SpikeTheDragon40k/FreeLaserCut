@@ -423,8 +423,9 @@ class MachineWizard(QDialog):
         # 0.17.6: con il simulatore il profilo si chiama «Simulatore», così non sovrascrive quello della macchina vera
         self.name.setText(tr("Simulatore") if port.device == SIM_PORT else ident.name())
         bx, by = ident.bed
-        self.bed_x.setValue(bx or self.main.profile.bed_x)
-        self.bed_y.setValue(by or self.main.profile.bed_y)
+        tx, ty = self.main.profile.travel()
+        self.bed_x.setValue(bx or tx)
+        self.bed_y.setValue(by or ty)
         self.log.appendPlainText(f"Risposta a {r['baud']} baud: {len(r['info'])} righe $I, {len(r['settings'])} impostazioni.")
         self._set_result_enabled(True)
 
@@ -440,7 +441,12 @@ class MachineWizard(QDialog):
         if port.device == SIM_PORT:  # 0.17.6: mai sopra il profilo di una macchina vera
             name = tr("Simulatore")
         p = machines.build_profile(self.ident, r["settings"], r["info"], name)
-        p.bed_x, p.bed_y = self.bed_x.value(), self.bed_y.value()
+        p.set_travel(self.bed_x.value(), self.bed_y.value())
+        if os.path.exists(p.path()):  # 0.19.3: stessa macchina già configurata: il piano ruotato resta com'era
+            try:
+                p.set_view_rot(MachineProfile.load(p.path()).rot())
+            except (OSError, ValueError, TypeError):
+                pass
         try:
             path = p.save()
         except OSError as exc:

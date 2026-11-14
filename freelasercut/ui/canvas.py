@@ -337,6 +337,12 @@ class Canvas(QGraphicsView):
         super().__init__(parent)
         self.editor = editor
         self.bed_x, self.bed_y = bed
+        # 0.19.3: dove sta «casa» (l'angolo dell'homing, lo 0 della macchina) sul piano come si vede: non sempre in
+        # basso a sinistra (assi invertiti, piano ruotato). Con il piano ruotato anche il verso degli assi X e Y
+        # della macchina. Li imposta la finestra principale.
+        self.plane_rot = 0
+        self.machine_zero = (0.0, 0.0)
+        self.machine_axes = ((1.0, 0.0), (0.0, 1.0))
         self.setScene(QGraphicsScene(self))
         self.setRenderHints(QPainter.Antialiasing | QPainter.TextAntialiasing | QPainter.SmoothPixmapTransform)
         self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
@@ -435,6 +441,19 @@ class Canvas(QGraphicsView):
     def set_bed(self, bx, by):
         self.bed_x, self.bed_y = float(bx), float(by)
         self.viewport().update()
+
+    def set_machine_marks(self, zero, axis_x, axis_y, rot=0):
+        """Lo 0 della macchina sul piano e il verso dei suoi assi (per il pallino verde e, con il piano ruotato, per
+        le due freccette X e Y)."""
+        zero = (min(max(float(zero[0]), 0.0), self.bed_x), min(max(float(zero[1]), 0.0), self.bed_y))
+        axes = []
+        for du, dv in (axis_x, axis_y):  # le frecce vanno verso l'interno del piano
+            inside = -1e-6 <= zero[0] + du * 1e-3 <= self.bed_x + 1e-6 and -1e-6 <= zero[1] + dv * 1e-3 <= self.bed_y + 1e-6
+            axes.append((float(du), float(dv)) if inside else (-float(du), -float(dv)))
+        new = (int(rot or 0) % 4, zero, tuple(axes))
+        if new != (self.plane_rot, self.machine_zero, self.machine_axes):
+            self.plane_rot, self.machine_zero, self.machine_axes = new
+            self.viewport().update()
 
     def sync(self):
         doc = self.editor.doc
@@ -852,7 +871,7 @@ class Canvas(QGraphicsView):
             self._last_vk = vk
             QTimer.singleShot(0, self, self.view_changed.emit)  # non durante il disegno
         gp = self.ghost_path()  # gli altri piani in grigio sono nello sfondo già pronto: niente lavoro a ogni ridisegno
-        key += (id(gp) if gp is not None else None,)
+        key += (id(gp) if gp is not None else None, self.machine_zero)
         ck, pix, step = self._bg_cache
         if ck != key or pix is None:
             dpr = vp.devicePixelRatioF()
@@ -949,11 +968,11 @@ class Canvas(QGraphicsView):
         p.setPen(cpen(pal["edge"], 1.5))
         p.setBrush(Qt.NoBrush)
         p.drawRect(bed)
-        # origine macchina
+        # origine macchina: nell'angolo dell'homing (0.19.3; prima sempre in basso a sinistra)
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(C["success"]))
         r = self.px(4)
-        p.drawEllipse(QPointF(0, 0), r, r)
+        p.drawEllipse(QPointF(self.machine_zero[0], self.machine_zero[1]), r, r)
 
     # ================================================================ disegno: primo piano
     def drawForeground(self, p, rect):
@@ -992,8 +1011,35 @@ class Canvas(QGraphicsView):
             p.drawRoundedRect(box, 4, 4)
             p.setPen(QColor("#FFFFFF"))
             p.drawText(box, Qt.AlignCenter, text)
+        if self.plane_rot:
+            self._draw_machine_axes(p, tf)
         self._draw_rulers(p, tf)
         p.restore()
+
+    def machine_axes_view(self, tf=None):
+        """[(lettera, punto di partenza, punta)] in pixel della vista: le freccette degli assi della macchina."""
+        tf = tf or self.bed_to_view_tf()
+        z = tf.map(QPointF(self.machine_zero[0], self.machine_zero[1]))
+        out = []
+        for name, (du, dv) in zip(("X", "Y"), self.machine_axes):
+            far = tf.map(QPointF(self.machine_zero[0] + du, self.machine_zero[1] + dv))
+            d = far - z
+            n = math.hypot(d.x(), d.y()) or 1.0
+            out.append((name, z, QPointF(z.x() + d.x() / n * 34, z.y() + d.y() / n * 34)))
+        return out
+
+    def _draw_machine_axes(self, p, tf):
+        """Piano ruotato: due freccette dallo 0 della macchina dicono dove vanno i suoi assi X e Y."""
+        p.setFont(style.ui_font(8))
+        for name, z, tip in self.machine_axes_view(tf):
+            col = QColor("#D9480F" if name == "X" else "#1971C2")
+            p.setPen(cpen(col.name(), 1.8))
+            p.drawLine(z, tip)
+            ux, uy = (tip.x() - z.x()) / 34.0, (tip.y() - z.y()) / 34.0
+            for sgn in (1, -1):
+                p.drawLine(tip, QPointF(tip.x() - 6 * ux + sgn * 4 * uy, tip.y() - 6 * uy - sgn * 4 * ux))
+            p.setPen(col)
+            p.drawText(QRectF(tip.x() + 9 * ux - 8, tip.y() + 9 * uy - 8, 16, 16), Qt.AlignCenter, name)
 
     def _draw_rulers(self, p, tf):
         W, H = self.viewport().width(), self.viewport().height()

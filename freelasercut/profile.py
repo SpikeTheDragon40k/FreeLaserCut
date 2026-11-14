@@ -107,6 +107,13 @@ class MachineProfile:
     tested_x: bool = False
     tested_y: bool = False
     axes_tested: bool = False  # tutti e due (dalla 0.13.0; resta per i profili già salvati)
+    # 0.19.3: piano mostrato ruotato rispetto alla macchina, in quarti di giro antiorari: 0 = non ruotato, 1 = «ruotato
+    # a sinistra», 3 = «ruotato a destra» (2 = capovolto: la matematica lo regge, la configurazione non lo offre).
+    # Cambia solo da dove si guarda il piatto: assi, punto zero e file dei progetti restano quelli della macchina.
+    # Con il piano ruotato bed_x/bed_y sono le misure del piano COME SI VEDE (larghezza, altezza): le corse della
+    # macchina sono travel(). Nel file del profilo restano le corse della macchina (save/load le scambiano), così
+    # una versione precedente che legge lo stesso file trova l'area giusta.
+    view_rot: int = 0
     # 0.17.12: asse Z motorizzato e autofocus con sonda (comando GRBL G38.2). La sonda deve essere collegata
     # all'ingresso «Probe» della scheda, non a un finecorsa.
     z_motor: bool = False
@@ -139,10 +146,12 @@ class MachineProfile:
         travel_x, travel_y = _f(s, 130, 0), _f(s, 131, 0)
         from .grbl_codes import travel_ok
 
+        tx, ty = p.travel()  # 0.19.3: $130/$131 sono le corse della macchina, non le misure del piano come si vede
         if travel_ok(travel_x):  # 0.17.2: un valore non credibile (es. 234500) non diventa il piano
-            p.bed_x = travel_x
+            tx = travel_x
         if travel_ok(travel_y):
-            p.bed_y = travel_y
+            ty = travel_y
+        p.set_travel(tx, ty)
         for line in info_lines or []:
             m = re.match(r"\[VER:([^\]]*)\]", line)
             if m:
@@ -188,10 +197,143 @@ class MachineProfile:
         return "  ·  ".join(parts)
 
     def bed_offset(self):
-        """Da coordinate macchina (MPos) a coordinate del piano (0..bed): piano = MPos + offset."""
+        """Da coordinate macchina (MPos) al telaio della macchina (0..corsa): telaio = MPos + offset."""
         if self.negative_space:
-            return (self.bed_x, self.bed_y)
+            return self.travel()
         return (0.0, 0.0)
+
+    # ---------------------------------------------------------------- piano ruotato (0.19.3)
+    # Tre sistemi: il PIANO come si vede e si disegna (u orizzontale 0..bed_x, v verso l'alto 0..bed_y); il TELAIO
+    # della macchina vista di fronte (x 0..corsa X da sinistra, y 0..corsa Y dal davanti: è il piano di sempre, quando
+    # non è ruotato); le coordinate MACCHINA che vanno nel G-code (telaio, più verso degli assi e coordinate negative).
+    # È sempre una rotazione vera: il solo scambio di X con Y sarebbe uno specchio e le scritte uscirebbero rovesciate.
+    def rot(self):
+        try:
+            return int(self.view_rot or 0) % 4
+        except (TypeError, ValueError):
+            return 0
+
+    def travel(self):
+        """(corsa X, corsa Y) della macchina, in mm."""
+        if self.rot() % 2:
+            return (self.bed_y, self.bed_x)
+        return (self.bed_x, self.bed_y)
+
+    def set_travel(self, tx, ty):
+        """Corse della macchina → misure del piano come si vede."""
+        if self.rot() % 2:
+            self.bed_x, self.bed_y = float(ty), float(tx)
+        else:
+            self.bed_x, self.bed_y = float(tx), float(ty)
+
+    def set_view_rot(self, k):
+        """Cambia l'orientamento del piano lasciando ferme le corse della macchina. -> True se è cambiato."""
+        try:
+            k = int(k) % 4
+        except (TypeError, ValueError):
+            k = 0
+        if k == self.rot():
+            self.view_rot = k
+            return False
+        tx, ty = self.travel()
+        self.view_rot = k
+        self.set_travel(tx, ty)
+        return True
+
+    def plane_to_frame(self, u, v):
+        k = self.rot()
+        if k == 1:
+            return v, self.bed_x - u
+        if k == 2:
+            return self.bed_x - u, self.bed_y - v
+        if k == 3:
+            return self.bed_y - v, u
+        return u, v
+
+    def frame_to_plane(self, x, y):
+        k = self.rot()
+        if k == 1:
+            return self.bed_x - y, x
+        if k == 2:
+            return self.bed_x - x, self.bed_y - y
+        if k == 3:
+            return y, self.bed_y - x
+        return x, y
+
+    def frame_delta(self, du, dv):
+        """Uno spostamento sul piano, visto nel telaio della macchina."""
+        k = self.rot()
+        if k == 1:
+            return dv, -du
+        if k == 2:
+            return -du, -dv
+        if k == 3:
+            return -dv, du
+        return du, dv
+
+    def plane_delta(self, dx, dy):
+        """Uno spostamento nel telaio della macchina, visto sul piano."""
+        k = self.rot()
+        if k == 1:
+            return -dy, dx
+        if k == 2:
+            return -dx, -dy
+        if k == 3:
+            return dy, -dx
+        return dx, dy
+
+    def to_machine_delta(self, du, dv):
+        """Uno spostamento sul piano → lo spostamento da chiedere alla macchina (frecce, lavori «dalla testa»)."""
+        dx, dy = self.frame_delta(du, dv)
+        sx, sy = self.axis_sign()
+        return sx * dx, sy * dy
+
+    def from_machine_delta(self, dmx, dmy):
+        """Uno spostamento della macchina → lo spostamento che si vede sul piano."""
+        sx, sy = self.axis_sign()
+        return self.plane_delta(sx * dmx, sy * dmy)
+
+    def homing_mask(self):
+        """$23 della scheda (verso dell'homing: 1 = X verso il meno, 2 = Y verso il meno), o None se non è noto."""
+        raw = getattr(self, "raw_settings", None) or {}
+        try:
+            return int(float(raw.get("23", raw.get(23))))
+        except (TypeError, ValueError):
+            return None
+
+    def home_machine(self):
+        """Coordinate macchina del punto in cui l'homing lascia la testa, o None se non si può sapere.
+        Coordinate positive (o non ancora note): è lo 0. Coordinate negative (GRBL classico, corsa da −corsa a 0):
+        dipende dal verso dell'homing ($23): verso il più è lo 0, verso il meno è l'estremo opposto (così fa, per
+        esempio, il Longer B1 quando conta in negativo)."""
+        if not self.negative_space:
+            return (0.0, 0.0)
+        mask = self.homing_mask()
+        if mask is None:
+            return None
+        tx, ty = self.travel()
+        return (-tx if mask & 1 else 0.0, -ty if mask & 2 else 0.0)
+
+    def home_corner(self):
+        """L'angolo del piano (come si vede) in cui l'homing lascia la testa: «casa». Se non si può sapere
+        (coordinate negative e $23 non letto) resta l'angolo davanti a sinistra della macchina, come fino alla 0.19.2."""
+        hm = self.home_machine()
+        if hm is None:
+            u, v = self.frame_to_plane(0.0, 0.0)
+        else:
+            u, v = self.to_bed(*hm)
+        w, h = float(self.bed_x), float(self.bed_y)
+        return (0.0 if u < w / 2 else w, 0.0 if v < h / 2 else h)
+
+    def home_point(self, margin=10.0):
+        """Punto del piano vicino a «casa» (l'angolo dell'homing), a `margin` mm dai bordi: è dove torna la testa a
+        fine lavoro con le coordinate assolute. Arrivare esattamente nell'angolo può far scattare il finecorsa (sul
+        B1 è successo). Fino alla 0.19.2 era sempre l'angolo davanti a sinistra, anche per le macchine con l'homing
+        da un'altra parte (rapporti del 13–14/11: K40 con l'homing dietro a sinistra, testa mandata davanti)."""
+        w, h = float(self.bed_x), float(self.bed_y)
+        cu, cv = self.home_corner()
+        mx, my = min(float(margin), w), min(float(margin), h)
+        return (mx if cu == 0.0 else w - mx, my if cv == 0.0 else h - my)
 
     def air_cmds(self):
         """(comando che accende l'aria, comando che la spegne) per lavori, prove e pulsante Aria (0.18.5).
@@ -238,21 +380,26 @@ class MachineProfile:
         return (self.invert_x, self.invert_y) != old
 
     def to_machine(self, x, y):
+        """Punto del piano (come si vede) → coordinate macchina."""
+        x, y = self.plane_to_frame(x, y)
+        tx, ty = self.travel()
         ox, oy = self.bed_offset()
         if self.invert_x:
-            x = self.bed_x - x
+            x = tx - x
         if self.invert_y:
-            y = self.bed_y - y
+            y = ty - y
         return x - ox, y - oy
 
     def to_bed(self, mx, my):
+        """Coordinate macchina → punto del piano (come si vede)."""
+        tx, ty = self.travel()
         ox, oy = self.bed_offset()
         bx, by = mx + ox, my + oy
         if self.invert_x:
-            bx = self.bed_x - bx
+            bx = tx - bx
         if self.invert_y:
-            by = self.bed_y - by
-        return bx, by
+            by = ty - by
+        return self.frame_to_plane(bx, by)
 
     def checks(self):
         """Lista di (livello, messaggio, correzione_suggerita|None). livello: ok/info/warn."""
@@ -272,12 +419,16 @@ class MachineProfile:
             out.append(("info", tr("Homing disattivato: l'origine è dove si trova la testa all'accensione"), None))
         # 0.17.4: prima il confronto era sempre con la targa del Longer B1 (450×440), anche per le altre macchine
         nom = self.nominal_area()
-        if nom and min(abs(self.bed_x - nom[0]) + abs(self.bed_y - nom[1]),
-                       abs(self.bed_x - nom[1]) + abs(self.bed_y - nom[0])) > 10:
-            out.append(("info", tr("Area di lavoro {0:g}×{1:g} mm (il produttore dichiara {2:g}×{3:g})", self.bed_x,
-                                   self.bed_y, nom[0], nom[1]), None))
+        tx, ty = self.travel()  # le misure della macchina, non quelle del piano ruotato
+        if nom and min(abs(tx - nom[0]) + abs(ty - nom[1]),
+                       abs(tx - nom[1]) + abs(ty - nom[0])) > 10:
+            out.append(("info", tr("Area di lavoro {0:g}×{1:g} mm (il produttore dichiara {2:g}×{3:g})", tx,
+                                   ty, nom[0], nom[1]), None))
         else:
-            out.append(("ok", tr("Area di lavoro {0:g}×{1:g} mm", self.bed_x, self.bed_y), None))
+            out.append(("ok", tr("Area di lavoro {0:g}×{1:g} mm", tx, ty), None))
+        if self.rot():
+            out.append(("info", tr("Piano mostrato ruotato di 90°: sullo schermo è largo {0:g} e alto {1:g} mm. Assi, "
+                                   "punto zero e file restano quelli della macchina", self.bed_x, self.bed_y), None))
         if not self.soft_limits and self.homing:
             out.append(("info", tr("Soft limits disattivi ($20=0): FreeLaserCut controlla comunque i bordi prima di inviare"), None))
         if self.max_rate_x < 3000 or self.max_rate_y < 3000:
@@ -303,10 +454,20 @@ class MachineProfile:
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", self.name).strip("_") or "profilo"
         return os.path.join(config_dir(), "profiles", f"{safe}.json")
 
+    def file_dict(self):
+        """Il profilo come va nel file: l'area è sempre quella della macchina (corse X e Y), anche con il piano
+        ruotato."""
+        data = asdict(self)
+        data["bed_x"], data["bed_y"] = self.travel()
+        data["view_rot"] = self.rot()
+        return data
+
     def save(self):
         path = self.path()
+        data = self.file_dict()  # prima il testo, poi il file: un errore qui non deve azzerare il profilo salvato
+        text = json.dumps(data, indent=2, ensure_ascii=False)
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump(asdict(self), fh, indent=2, ensure_ascii=False)
+            fh.write(text)
         return path
 
     @classmethod
@@ -322,7 +483,10 @@ class MachineProfile:
                 # non lo do per vero, altrimenti il primo homing potrebbe capovolgere gli assi
                 known["origin_corner"] = ""
         p = cls(**known)
+        k = p.rot()  # nel file l'area è quella della macchina: con il piano ruotato il piano la vede scambiata
+        p.view_rot = 0
         p.fix_bed()
+        p.set_view_rot(k)
         return p
 
     def nominal_area(self):
@@ -347,6 +511,14 @@ class MachineProfile:
         self.bed_fixed = None
         if travel_ok(self.bed_x) and travel_ok(self.bed_y):
             return None
+        if self.rot() % 2:  # 0.19.3: i valori di riserva sono corse della macchina; qui si lavora non ruotati
+            k = self.rot()
+            self.bed_x, self.bed_y = self.bed_y, self.bed_x
+            self.view_rot = 0
+            old = self.fix_bed()
+            self.view_rot = k
+            self.bed_x, self.bed_y = self.bed_y, self.bed_x
+            return old
         old = (self.bed_x, self.bed_y)
         if self.model == "Longer B1 40W":
             nx, ny = 450.0, 440.0

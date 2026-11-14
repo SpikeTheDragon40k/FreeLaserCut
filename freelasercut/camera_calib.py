@@ -34,6 +34,11 @@ def _order_for(n):
     return 0
 
 
+# 0.19.3 — piano ruotato: quarti di giro del piano mostrato (lo imposta la finestra principale). Una calibrazione
+# vale solo per l'orientamento con cui è stata fatta.
+PLANE_ROT = 0
+
+
 class CameraModel:
     def __init__(self, H, coef, order, center, scale, bed, frame_size, rms_mm=None, max_mm=None, n_points=0,
                  k=(0.0, 0.0)):
@@ -100,13 +105,16 @@ class CameraModel:
 
     # ---------------------------------------------------------------- file
     def to_dict(self):
-        return {
+        d = {
             "version": 1, "H": self.H.tolist(), "coef": None if self.coef is None else self.coef.tolist(),
             "order": self.order, "center": self.center.tolist(), "scale": self.scale.tolist(),
             "bed": list(self.bed), "frame_size": list(self.frame_size), "rms_mm": self.rms_mm,
             "max_mm": self.max_mm, "n_points": self.n_points, "created": self.created, "k": list(self.k),
             "valid": None if self.valid is None else [float(v) for v in self.valid],
         }
+        if PLANE_ROT:  # solo se il piano è ruotato: i file di prima restano identici
+            d["plane_rot"] = PLANE_ROT
+        return d
 
     @classmethod
     def from_dict(cls, d):
@@ -126,6 +134,14 @@ class CameraModel:
     def load(cls, path):
         with open(path, encoding="utf-8") as fh:
             d = json.load(fh)
+        try:
+            rot = int(d.get("plane_rot", 0) or 0) % 4
+        except (TypeError, ValueError):
+            rot = 0
+        if rot != PLANE_ROT:
+            # la calibrazione lega i punti della foto al piano COME SI VEDEVA: con un altro orientamento metterebbe
+            # la foto girata sotto il disegno. Meglio rifarla che fidarsi
+            raise ValueError("calibrazione fatta con un altro orientamento del piano")
         return cls.from_dict(d), d
 
 

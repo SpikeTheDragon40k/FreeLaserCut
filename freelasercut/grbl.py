@@ -219,6 +219,7 @@ class GrblController(QObject):
         self.auto_backup = True
         self.last_reply = 0.0  # ora dell'ultimo ok/error ricevuto
         self.axis_sign = (1.0, 1.0)  # dal profilo: -1 sugli assi invertiti
+        self.axis_rot = 0  # 0.19.3, dal profilo: quarti di giro del piano mostrato rispetto alla macchina
         self.air_cmds = ("M8", "M9")  # dal profilo: comandi che accendono e spengono l'aria
         self.stale_check_exit = False  # sto facendo uscire la scheda da un check mode rimasto acceso
         self.trusted_buffer = False  # scheda nota: uso tutto il buffer dichiarato in [OPT]
@@ -454,6 +455,13 @@ class GrblController(QObject):
 
     def jog(self, dx=0.0, dy=0.0, feed=3000):
         sx, sy = self.axis_sign  # assi invertiti nel profilo: «su» sul piano resta «su» per la testa
+        k = int(self.axis_rot or 0) % 4
+        if k == 1:  # piano ruotato (0.19.3): lo spostamento sul piano, visto dalla macchina (come profile.frame_delta)
+            dx, dy = dy, -dx
+        elif k == 2:
+            dx, dy = -dx, -dy
+        elif k == 3:
+            dx, dy = -dy, dx
         dx, dy = dx * sx, dy * sy
         parts = []
         if dx:

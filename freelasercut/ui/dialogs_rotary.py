@@ -94,7 +94,8 @@ class RotaryDialog(QDialog):
         if not ctl.connected or ctl.job_active:
             self.info.setText(tr("Connetti la macchina per la prova."))
             return
-        ctl.jog(0.0, self.mm_rev.value(), 1500)
+        # 0.19.3: il rotativo è sull'asse Y della macchina; ctl.jog ragiona sul piano come si vede
+        ctl.jog(*self.main.profile.plane_delta(0.0, self.mm_rev.value()), 1500)
 
     def accept(self):
         qs = self.main.qs

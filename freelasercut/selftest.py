@@ -55,6 +55,11 @@ def run():
         w.show()
         app.processEvents()
         say(f"  finestra principale: ok ({w.width()}×{w.height()}, piattaforma Qt {app.platformName()})")
+        if sys.platform == "win32":  # 0.19.3: icona e rilancio dalla barra delle applicazioni
+            from . import taskbar
+
+            w.pin_identity()
+            say("  " + taskbar.status_line(int(w.winId())))
         from . import diag, updater
 
         say(f"  aggiornamento: {updater.mode()}")

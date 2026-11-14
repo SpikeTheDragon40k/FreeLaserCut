@@ -227,7 +227,8 @@ class MachinePanel(QWidget):
     def refresh_profile(self):
         p = self.profile
         self.profile_title.setText(p.name)
-        for sp, v in ((self.area_x, p.bed_x), (self.area_y, p.bed_y)):
+        tx, ty = p.travel()  # 0.19.3: le corse della macchina, anche con il piano mostrato ruotato
+        for sp, v in ((self.area_x, tx), (self.area_y, ty)):
             sp.blockSignals(True)
             sp.setValue(v)
             sp.blockSignals(False)
@@ -271,15 +272,16 @@ class MachinePanel(QWidget):
         if self.ctl.job_active:
             return
         p = self.profile
-        p.bed_x, p.bed_y = float(self.area_x.value()), float(self.area_y.value())
+        p.set_travel(float(self.area_x.value()), float(self.area_y.value()))
         try:
             p.save()
         except OSError as exc:
             QMessageBox.warning(self, tr("Profilo"), tr("Impossibile salvare il profilo:\n{0}", exc))
         self.refresh_profile()
         self.on_profile(p)
-        _main(self).statusBar().showMessage(tr("Area di lavoro {0:g} × {1:g} mm salvata nel profilo «{2}»", p.bed_x,
-                                               p.bed_y, p.name), 6000)
+        tx, ty = p.travel()
+        _main(self).statusBar().showMessage(tr("Area di lavoro {0:g} × {1:g} mm salvata nel profilo «{2}»", tx,
+                                               ty, p.name), 6000)
 
     def set_air(self, on):
         """Comando dell'air assist scelto a mano: entra nel profilo, che si salva, e vale da subito."""

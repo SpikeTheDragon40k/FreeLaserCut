@@ -45,8 +45,47 @@ def flip_preview(pv, fx, fy):
     return pv
 
 
+def _plane_rot(profile):
+    """Quarti di giro del piano mostrato rispetto alla macchina (0 = non ruotato; profili senza il dato = 0)."""
+    rot = getattr(profile, "rot", None)
+    return rot() if callable(rot) else 0
+
+
+def unmap_preview(pv, profile):
+    """Riporta sul piano (come si vede) un'anteprima letta dal G-code, che è in coordinate d'uscita: verso degli
+    assi e, dalla 0.19.3, piano ruotato. A parte lo spostamento (out_to_bed), che resta a chi chiama."""
+    fx, fy = bool(getattr(profile, "invert_x", False)), bool(getattr(profile, "invert_y", False))
+    if not _plane_rot(profile):
+        return flip_preview(pv, fx, fy)
+    if pv is None:
+        return pv
+    import numpy as np
+
+    (a, c), (b, d) = profile.from_machine_delta(1.0, 0.0), profile.from_machine_delta(0.0, 1.0)  # colonne della matrice
+    for arr in (pv.segs, pv.cut, pv.travel):
+        if arr is None or not len(arr):
+            continue
+        for i, j in ((0, 1), (2, 3)):
+            x, y = arr[:, i].copy(), arr[:, j].copy()
+            arr[:, i] = a * x + b * y
+            arr[:, j] = c * x + d * y
+    if pv.min_x <= pv.max_x:
+        pts = [(a * x + b * y, c * x + d * y) for x in (pv.min_x, pv.max_x) for y in (pv.min_y, pv.max_y)]
+        pv.min_x, pv.max_x = min(q[0] for q in pts), max(q[0] for q in pts)
+        pv.min_y, pv.max_y = min(q[1] for q in pts), max(q[1] for q in pts)
+    return pv
+
+
 def orient_job_preview(job, profile, out_at):
-    """Con un asse invertito l'anteprima va ribaltata e l'offset è l'uscita del punto 0 del piano su quell'asse."""
+    """Con un asse invertito l'anteprima va ribaltata e l'offset è l'uscita del punto 0 del piano su quell'asse.
+    Con il piano ruotato (0.19.3) l'uscita è una rotazione del piano: l'anteprima si riporta sul piano e il suo
+    spostamento è il punto del piano che esce in 0,0 (out_at è lineare: uscita = L·piano + c)."""
+    if _plane_rot(profile):
+        if job.preview is not None:
+            unmap_preview(job.preview, profile)
+        c = out_at(0.0, 0.0)
+        job.out_to_bed = tuple(profile.from_machine_delta(-c[0], -c[1]))
+        return
     fx, fy = bool(getattr(profile, "invert_x", False)), bool(getattr(profile, "invert_y", False))
     if not (fx or fy) or job.preview is None:
         return
@@ -899,8 +938,12 @@ def _generate(doc: Document, profile, opts: JobOptions = None) -> GcodeJob:
 
         sx, sy = profile.axis_sign() if hasattr(profile, "axis_sign") else (1.0, 1.0)
 
-        def out_map(bx, by):  # relative alla testa: con un asse invertito il verso si capovolge
-            return sx * (bx - anchor.x()), sy * (by - anchor.y())
+        if _plane_rot(profile):  # 0.19.3: piano ruotato, lo spostamento sul piano va girato prima dei segni
+            def out_map(bx, by):
+                return profile.to_machine_delta(bx - anchor.x(), by - anchor.y())
+        else:
+            def out_map(bx, by):  # relative alla testa: con un asse invertito il verso si capovolge
+                return sx * (bx - anchor.x()), sy * (by - anchor.y())
         job.out_to_bed = (target[0], target[1])
 
     # il disegno viene "spostato" sul piano di place: genero già in coordinate piano finali
@@ -910,6 +953,12 @@ def _generate(doc: Document, profile, opts: JobOptions = None) -> GcodeJob:
         return out_map(bx - place[0], by - place[1])
 
     rot_k = rotary_scale(opts.rotary)
+    if rot_k != 1.0 and _plane_rot(profile):
+        # 0.19.3: il rotativo scala l'asse Y della macchina, che con il piano ruotato non è più il verticale del
+        # disegno. Non provato: meglio rifiutarlo che incidere fuori misura
+        rot_k = 1.0
+        job.warnings.insert(0, tr("Con il piano ruotato il rotativo non si può usare: il lavoro è preparato senza. "
+                                  "Per il rotativo rimetti il piano non ruotato (Configurazione guidata della macchina)"))
     if rot_k != 1.0:  # rotativo: l'asse Y gira l'oggetto, si scala attorno all'ancoraggio del disegno
         ref = (anchor.x() + place[0], anchor.y() + place[1])
         _, ref_oy = placed_map(*ref)
@@ -1050,7 +1099,9 @@ def _generate(doc: Document, profile, opts: JobOptions = None) -> GcodeJob:
         if opts.start_from == "absolute":
             # vicino a casa ma a 10 mm dai finecorsa: arrivare esattamente su 0,0 può far scattare l'interruttore
             # (sul B1 è successo: allarme 1 a pochi mm dall'origine)
-            w.rapid(min(10.0, bed[0]), min(10.0, bed[1]))
+            # 0.19.3: «casa» è l'angolo dello 0 della macchina (quello dell'homing), non sempre davanti a sinistra
+            home = profile.home_point(10.0) if hasattr(profile, "home_point") else (min(10.0, bed[0]), min(10.0, bed[1]))
+            w.rapid(home[0], home[1])
         else:
             target = opts.current_pos if opts.start_from == "current" else opts.work_origin
             w.rapid(target[0], target[1])

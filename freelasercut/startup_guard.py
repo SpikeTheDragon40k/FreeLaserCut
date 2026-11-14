@@ -316,6 +316,81 @@ def write_error(exc_type, exc, tb):
     return _append(LOG, head + "\n".join(system_lines()) + "\n" + sanitize(text))
 
 
+# ============================================================================ Windows troppo vecchio (0.19.3)
+# Qt 6.12 gira da Windows 10 versione 1809 (build 17763) in poi. Su un Windows 10 più vecchio le sue librerie non si
+# caricano e fino alla 0.19.2 usciva solo l'errore generico «DLL load failed» (rapporto del 13/11: build 10240, la
+# prima versione di Windows 10). Qui lo si dice chiaro, prima ancora di provare a caricare Qt.
+MIN_WIN_BUILD = 17763
+WIN_BUILD_ENV = "FLC_PROVA_WINDOWS"  # prove: la build di un Windows finto, per esempio «10240» (vale su ogni sistema)
+OLD_WIN_OK_ENV = "FLC_WINDOWS_VECCHIO_OK"  # «1»: tenta l'avvio lo stesso (prove, o chi vuole provarci)
+
+
+def windows_build():
+    """La build di Windows (10240, 19045, 26100…), o None se non siamo su Windows o non si riesce a leggerla."""
+    fake = os.environ.get(WIN_BUILD_ENV, "").strip()
+    if fake:
+        return int(fake) if fake.isdigit() else None
+    if sys.platform != "win32":
+        return None
+    build = ""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+            build = str(winreg.QueryValueEx(key, "CurrentBuild")[0])
+    except Exception:  # noqa: BLE001
+        build = ""
+    if not build.isdigit():
+        try:
+            build = str(sys.getwindowsversion().build)
+        except Exception:  # noqa: BLE001
+            build = ""
+    return int(build) if build.isdigit() and int(build) > 0 else None
+
+
+def old_windows(build="?"):
+    """True se questo Windows è più vecchio di quello che serve a Qt. Una build che non si riesce a leggere non
+    blocca mai l'avvio: meglio un errore generico più avanti che fermare un PC che funzionerebbe."""
+    if build == "?":
+        build = windows_build()
+    return isinstance(build, int) and build < MIN_WIN_BUILD
+
+
+def old_windows_text(build=None):
+    """Il messaggio per chi ha un Windows troppo vecchio. Testo fisso, in inglese e in italiano."""
+    if os.environ.get(WIN_BUILD_ENV) or sys.platform != "win32":
+        have = f"Windows, build {build}"
+    else:
+        try:
+            have = windows_text()
+        except Exception:  # noqa: BLE001
+            have = f"Windows, build {build}"
+    return ("This Windows is too old for FreeLaserCut.\n"
+            f"You have {have}. FreeLaserCut works on Windows 10 version 1809 or later, or on Windows 11.\n"
+            "Update Windows (Settings → Update & Security → Windows Update) and try again."
+            "\n\nQuesto Windows è troppo vecchio per FreeLaserCut.\n"
+            f"Hai {have}. FreeLaserCut funziona da Windows 10 versione 1809 in poi, oppure con Windows 11.\n"
+            "Aggiorna Windows (Impostazioni → Aggiornamento e sicurezza → Windows Update) e riprova.")
+
+
+def check_windows():
+    """Da chiamare prima di caricare Qt. Se Windows è troppo vecchio lo scrive in flc.log, lo dice con la finestra
+    di sistema e ritorna True: chi chiama esce. Con FLC_WINDOWS_VECCHIO_OK=1 lo scrive soltanto e lascia provare."""
+    build = windows_build()
+    if not old_windows(build):
+        return False
+    try:
+        head = f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')}  FreeLaserCut {version()} — Windows troppo vecchio\n"
+        _append(LOG, head + "\n".join(system_lines()) + f"\nBuild {build}: serve almeno la {MIN_WIN_BUILD} "
+                "(Windows 10 versione 1809)\n")
+    except Exception:  # noqa: BLE001
+        pass
+    if os.environ.get(OLD_WIN_OK_ENV) == "1":
+        return False
+    show(old_windows_text(build))
+    return True
+
+
 # ============================================================================ come lo si dice
 def error_text(path, detail=""):
     """Il messaggio per chi non vede partire il programma. Testo fisso, in inglese e in italiano."""

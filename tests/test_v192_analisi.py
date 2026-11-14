@@ -272,8 +272,13 @@ if pal is not None:
     w.qs.remove("palette_recent")
     pal.open()
     spin()
-    check("B5 la ricerca si apre e mostra i comandi", pal.isVisible() and pal.list.count() > 50, str(pal.list.count()))
-    first_before = pal.list.item(0).data(Qt.UserRole)
+    if BANCO:
+        check("B5 la ricerca si apre e mostra i comandi", pal.isVisible() and pal.list.count() > 50, str(pal.list.count()))
+        first_before = pal.list.item(0).data(Qt.UserRole)
+    else:  # 0.19.3: nella classica è la casella nella barra in basso; vuota e senza comandi usati non propone niente
+        check("B5 la ricerca si apre nella casella della barra in basso (0.19.3)", pal.is_open() and
+              pal.edit.parent() is w.statusBar() and pal.list.count() == 0, str(pal.list.count()))
+        first_before = None
     pal.edit.setText("griglia")
     spin()
     rows = [pal.list.item(i) for i in range(pal.list.count())]
@@ -289,7 +294,7 @@ if pal is not None:
           and first_before is not w.acts["grid"])
     check("B5 i recenti si ricordano per nome interno (valgono in ogni lingua)", w.qs.value("palette_recent") in (
         ["a:grid"], "a:grid"), str(w.qs.value("palette_recent")))
-    pal.hide()
+    pal.hide() if BANCO else pal.close_box()
     w.acts["grid"].trigger()  # com'era
     spin()
 

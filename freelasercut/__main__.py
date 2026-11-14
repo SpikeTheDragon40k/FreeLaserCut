@@ -18,6 +18,9 @@ def boot():
     # 0.18.16: da qui in poi qualsiasi errore finisce in flc.log (o flc_crash.log) e viene mostrato, anche se Qt non
     # si carica. Gli import di Qt stanno qui dentro, non in testa al file, proprio per questo.
     guard.install()
+    # 0.19.3: Windows 10 più vecchio della versione 1809: Qt non si caricherebbe. Lo si dice chiaro e si esce
+    if guard.check_windows():
+        sys.exit(3)
     guard.stage("lingua")
     from . import i18n
 
