@@ -174,6 +174,12 @@ CATALOG = (
     ("Sculpfun E1 12W", "Sculpfun", 400, 320, "12 W", 36000),
     ("Sculpfun E1 Pro 21W", "Sculpfun", 400, 320, "21 W", 36000),
     ("Sculpfun E1 3W IR", "Sculpfun", 400, 320, "3 W (infrarosso)", 36000),
+    # 0.20.1: chiesto da Ale per un tester. Carverall JL9, venduto anche come «X1 Pro». Dalla pagina ufficiale Carverall
+    # (SOURCES, letta il 15/11/2026): diodo da 20 W a 455 nm, area 300 × 300 mm, 15.000 mm/min (alcuni annunci dicono
+    # 20.000: si usa il valore della pagina ufficiale), scheda GRBL a 32 bit, USB e Wi-Fi, spot non dichiarato. Dal
+    # manuale ufficiale «X1Pro_JL9 User Manual_EN» (cartella «User Manual» linkata da carverall.com/pages/carverall-user-
+    # guides): chip USB CH340, area 300 × 300 e origine davanti a sinistra nella configurazione GRBL, homing automatico.
+    ("Carverall JL9 (X1 Pro) 20W", "Carverall", 300, 300, "20 W", 15000),
 )
 # area dichiarata dal produttore, quando è stata ridotta per prudenza (vedi sopra)
 AREA_NOTE = {
@@ -233,6 +239,7 @@ SOURCES = {
     "Sculpfun E1 12W": "https://www.sculpfun.com/products/sculpfun-e1-enclosed-dual-laser-engraving-machine",
     "Sculpfun E1 Pro 21W": "https://www.sculpfun.com/products/sculpfun-e1-pro-enclosed-laser-engraving-machine",
     "Sculpfun E1 3W IR": "https://www.sculpfun.com/products/sculpfun-ir3-3w-infrared-laser-module-for-e1-enclosed-laser-engraver",
+    "Carverall JL9 (X1 Pro) 20W": "https://www.carverall.com/products/x1pro-laser-engraver",
 }
 # firmware che rispondono error:20 a G55 (visto nel registro di un Acmer S1, firmware 1.0.4 del 2025)
 NO_G55 = {"Acmer S1 (2,5W / 3,5W / 6W)"}
@@ -246,7 +253,8 @@ NOTES = {
     "Scheda Makerbase MKS DLC32": tr(
         "MKS DLC32: collega la macchina e premi «Leggi dalla macchina» per l'area di lavoro vera. Se premendo una "
         "freccia la testa va dalla parte opposta, spunta «Inverti l'asse X/Y» nel pannello Laser. Via Wi-Fi la porta "
-        "è di solito 8080. Se il firmware non accetta G55, FreeLaserCut se ne accorge alla prima verifica."),
+        "è di solito 8080. Se il firmware non accetta G55, FreeLaserCut se ne accorge alla prima verifica. L'aria "
+        "assistita parte con M7: se la tua pompa non parte, prova M8 in Macchina → Air assist."),
     "Sculpfun iCube Ultra 12W": tr("Gli iCube si collegano con il cavo USB (il Bluetooth serve solo per l'app)."),
 }
 for _n in ("Acmer P3 24W", "Acmer P3 48W", "Acmer P3 2W IR", "Acmer P3 2-in-1 (diodo + IR)"):
@@ -292,6 +300,14 @@ for _n in E1:
         "12345678, indirizzo 192.168.4.1, porta 8080. Il rullo e il mandrino Sculpfun girano sull'asse A: il "
         "rotativo di FreeLaserCut usa l'asse Y e non li comanda. Non ancora provato su una E1 vera: alla prima "
         "connessione fai la configurazione guidata, che controlla l'angolo dello 0 e il verso delle frecce.")
+NOTES["Carverall JL9 (X1 Pro) 20W"] = tr(
+    "Carverall JL9 (venduto anche come X1 Pro): scheda GRBL con chip USB CH340, area 300 × 300 mm e origine davanti a "
+    "sinistra (dal manuale Carverall). Prima di collegare installa il driver CH340 e chiudi CutLabX o gli altri programmi "
+    "del laser, che tengono occupata la porta. Carverall dichiara 15.000 mm/min sulla pagina del prodotto (20.000 in "
+    "alcuni annunci): collegando la macchina e premendo «Leggi dalla macchina», velocità e area vere si leggono dalla "
+    "scheda. Il Wi-Fi è pensato per l'app CutLabX e non è provato con FreeLaserCut: usa il cavo USB. Non ancora provato "
+    "su un JL9 vero: alla prima connessione fai la configurazione guidata, che controlla l'angolo dello 0 e il verso "
+    "delle frecce.")
 # spot del laser (mm) dichiarato dal produttore, dove è diverso dal valore comune (0,08 × 0,10)
 for _n, (_ax, _ay) in AREA_NOTE.items():
     _bx, _by = next((c[2], c[3]) for c in CATALOG if c[0] == _n)
@@ -333,6 +349,10 @@ ACCEL.update({n: 1000.0 for n in E1})  # $120/$121 di fabbrica (tabella di diode
 FAMILIES = (E1,)
 # comando che accende l'aria assistita, dove il profilo ufficiale del produttore non usa il solito M8 (0.19.2)
 AIR_ON = {n: "M7" for n in _P2}
+# 0.20.1: le schede Makerbase MKS DLC32 accendono l'uscita dell'aria con M7 (rapporti del 15/11/2026 da una DLC32
+# V2.1 su un telaio fatto in casa; lo stesso comando del profilo ufficiale dell'Acmer P2, che monta la DLC32)
+AIR_ON["Scheda Makerbase MKS DLC32"] = "M7"
+AIR_BY_VENDOR = {"Makerbase": "M7"}
 GENERIC = tr("Altro laser GRBL (si legge dalla macchina)")
 
 
@@ -576,6 +596,10 @@ def identify(banner=(), info=(), settings=None, port=None, baud=115200):
                                            "controlla che sia quello giusto.", bx, by)))
         elif same:
             ident.candidates = same
+    if ident.vendor in AIR_BY_VENDOR:  # 0.20.1
+        ident.notes.append(("info", tr("Air assist: su queste schede l'aria si accende di solito con {0}. Se la pompa non "
+                                       "parte, controlla il comando in Macchina → Air assist e provalo con il "
+                                       "pulsante Aria.", AIR_BY_VENDOR[ident.vendor])))
     # affidabilità
     score = (2 if ident.vendor else 0) + (1 if ident.family else 0) + (1 if bx and by else 0) + (1 if ident.board else 0)
     ident.confidence = "alta" if score >= 4 else "media" if score >= 2 else "bassa"
@@ -611,6 +635,8 @@ def base_profile(ident):
     else:
         p = MachineProfile(name=ident.name(), model=ident.name(), optical_power="", spot_x_mm=0.10, spot_y_mm=0.10)
         p.vendor_fw = ident.vendor_fw
+        if ident.vendor in AIR_BY_VENDOR:  # 0.20.1: scheda riconosciuta, modello no (telaio fatto in casa)
+            p.air_on, p.air_off = AIR_BY_VENDOR[ident.vendor], "M9"
     p.baud = ident.baud
     return p
 

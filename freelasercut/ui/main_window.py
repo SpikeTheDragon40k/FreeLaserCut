@@ -52,6 +52,45 @@ IMPORT_FILTER = (IMPORT_FILTER.replace(" *.webp)", " *.webp " + _PCB_GLOBS + ")"
 
 BIG_PHOTO_DOTS = 5_000_000  # oltre: chiede conferma prima di preparare il lavoro (tempo, memoria)
 
+class ShrinkLabel(QLabel):
+    """0.20.1: scritta della barra in basso che non chiede mai spazio: larghezza minima 0, al massimo la sua
+    larghezza massima; il testo che non ci sta si accorcia nel mezzo con «…». Il testo intero resta in fullText()."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._full = ""
+        self.setText(text)
+
+    def setText(self, text):
+        self._full = text or ""
+        self._elide()
+        self.updateGeometry()
+
+    def fullText(self):
+        return self._full
+
+    def _elide(self):
+        room = max(self.width() - 2, 0) if self.isVisible() else self.maximumWidth()
+        QLabel.setText(self, self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, room))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._elide()
+
+    def sizeHint(self):
+        h = super().sizeHint().height()
+        m = self.contentsMargins()
+        want = self.fontMetrics().horizontalAdvance(self._full) + m.left() + m.right() + 4
+        return QSize(min(want, self.maximumWidth()), h)
+
+    def minimumSizeHint(self):
+        return QSize(0, super().minimumSizeHint().height())
+
+
 class MainWindow(QMainWindow):
     # dopo la connessione: se la scheda non ha ancora risposto, avviso (velocità della porta). 0.17.3: 9 s, perché prima
     # FreeLaserCut prova da solo Ctrl+X (2,5 s) e il riavvio dalla porta USB (4 s, poi 3 s per l'avvio della scheda)
@@ -1173,12 +1212,23 @@ class MainWindow(QMainWindow):
             b.setIconSize(QSize(14, 14))
             sl.addWidget(b)
         sb.addPermanentWidget(snaps)
-        # 0.20.0: da quale file vengono le forme selezionate (si vede solo con una selezione importata)
-        self.lbl_origin = QLabel("")
+        # 0.20.0: da quale file vengono le forme selezionate (si vede solo con una selezione importata). 0.20.1: non
+        # allarga mai la barra, quindi mai la finestra (Evoluzione2, 15/11: aprendo un progetto la finestra usciva dallo
+        # schermo a destra, con i pannelli e i menu); se lo spazio non basta la scritta si accorcia con «…»
+        self.lbl_origin = ShrinkLabel("")
         self.lbl_origin.setObjectName("muted")
         self.lbl_origin.setMaximumWidth(260)
         self.lbl_origin.hide()
-        sb.addPermanentWidget(self.lbl_origin)
+        # in un contenitore sempre presente e largo 0 quando la scritta non c'è: così, quando compare, la barra non
+        # aggiunge nemmeno lo spazio fra un elemento e l'altro (0.20.1)
+        holder = QWidget()
+        hl = QHBoxLayout(holder)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        hl.addWidget(self.lbl_origin)
+        holder.setMinimumWidth(0)
+        self._origin_holder = holder
+        sb.addPermanentWidget(holder)
         for w in (self.lbl_fs, self.lbl_head, self.lbl_cursor, self.lbl_zoom):
             sb.addPermanentWidget(w)
 
@@ -1292,7 +1342,27 @@ class MainWindow(QMainWindow):
         self.acts["plate_overview"].setEnabled(n > 1 or self.acts["plate_overview"].isChecked())
         self.acts["plate_ghosts"].setEnabled(n > 1)
 
+    def _sync_auto_name(self):
+        """0.20.1: il nome dato dall'importazione segue i file che restano, finché il progetto non è salvato. Il nome
+        resta finché c'è ancora una forma del suo file (in qualunque piano); tolte tutte, passa al primo file rimasto;
+        senza forme importate torna «Senza titolo». Così Salva ed Esporta non propongono il nome di un file che sul
+        piano non c'è più (e che si rischierebbe di sovrascrivere)."""
+        d = self.editor.doc
+        if not getattr(d, "name_auto", False) or d.path:
+            return False
+        present = set()
+        for pl in d.plates:
+            present.update(origins(pl.shapes))
+        order = [n for n in getattr(d, "import_order", []) if n in present]
+        order += sorted(present - set(order))  # file arrivati per un'altra strada (incolla da un altro progetto)
+        new = os.path.splitext(order[0])[0] if order else tr("Senza titolo")
+        if new == d.name:
+            return False
+        d.name = new
+        return True
+
     def _doc_changed(self):
+        self._sync_auto_name()
         self._update_title()
         self.job = None  # il lavoro va rigenerato
         self._big_photo_ok = False
@@ -1435,6 +1505,7 @@ class MainWindow(QMainWindow):
         self.qs.setValue("last_dir", os.path.dirname(path))
         self.editor.doc.path = path
         self.editor.doc.name = os.path.splitext(os.path.basename(path))[0]
+        self.editor.doc.name_auto = False  # 0.20.1: ora il nome è quello del file
         ok = self.file_save()
         if ok:
             self._add_recent(path)
@@ -1584,6 +1655,8 @@ class MainWindow(QMainWindow):
                 self._import_note = io_formats.LAST_NOTE
             set_origin(shapes, os.path.basename(p))  # 0.20.0: da quale file viene ogni forma
             first_name = first_name or os.path.splitext(os.path.basename(p))[0]
+            if os.path.basename(p) not in doc.import_order:  # 0.20.1
+                doc.import_order.append(os.path.basename(p))
             added += shapes
         if not added:
             return
@@ -1612,6 +1685,7 @@ class MainWindow(QMainWindow):
                     doc.layer(leaf.layer).mode = "image"
         if was_empty and first_name and doc.name in ("", tr("Senza titolo"), "Senza titolo", "Progetto"):
             doc.name = first_name  # 0.20.0: «Pippo.svg» in un progetto nuovo → progetto «Pippo» (titolo, Salva, Esporta)
+            doc.name_auto = True  # 0.20.1: finché non si salva, il nome segue i file che restano
             self._update_title()
         self._update_origin()
         self.statusBar().showMessage(self._import_note or tr("Importati {0} oggetti", len(added)),
