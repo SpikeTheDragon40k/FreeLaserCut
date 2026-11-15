@@ -1101,8 +1101,12 @@ class ContextBar(QFrame):
         win.removeToolBar(win.numeric)
         win.numeric.setParent(self)
         # 0.18.2: etichette X, Y, L, A, R chiare: sul pannello scuro il grigio del tema chiaro quasi non si leggeva
+        # 0.20.3: i campi si sono allargati perché il numero si legga intero (la prima cifra usciva tagliata); il
+        # posto in più si prende da etichette e separatori, così nella barra entra quello che entrava prima
         win.numeric.setStyleSheet("QToolBar { background: transparent; border: none; } "
-                                  "QLabel#numlabel { color: #C3CEE3; }")
+                                  "QLabel#numlabel { color: #C3CEE3; padding: 0 2px 0 3px; } "
+                                  "QToolBar::separator { margin: 4px 3px; }")
+        win.numeric.set_compact(True)
         for act in win.numeric.actions():  # il tipo di forma è già scritto nella scheda Proprietà: qui toglie posto
             if win.numeric.widgetForAction(act) is getattr(win.numeric, "info", None):
                 act.setVisible(False)
@@ -1135,7 +1139,8 @@ class ContextBar(QFrame):
                                                    a["align_vcenter"], a["align_bottom"], None, a["align_center"], None,
                                                    a["dist_h"], a["dist_v"], a["dist_hc"], a["dist_vc"], None,
                                                    a["same_w"], a["same_h"], None, a["distance"]]))
-        row.addWidget(_menu_button(tr("Combina"), [a["union"], a["difference"], a["intersection"], a["xor"]]))
+        row.addWidget(_menu_button(tr("Combina"), [a["union"], a["difference"], a["intersection"], a["xor"], None,
+                                                   a["photo_clip"], a["photo_unclip"]]))  # 0.20.3
         row.addWidget(_menu_button(tr("Serie"), [a["grid_array"], a["circ_array"], a["along_path"]]))
         self.wide_only = [_act_button(a[k], "bcTool", 18) for k in ("nest", "offset", "to_path")]
         for b in self.wide_only:
@@ -1906,6 +1911,10 @@ class Banco(QObject):
                      (tr("Raggruppa"), a["group"]) if n > 1 else (tr("Separa"), a["ungroup"]),
                      (tr("Offset"), a["offset"]), (tr("Serie"), a["grid_array"]), (tr("In tracciato"), a["to_path"]),
                      (tr("Rifletti"), a["flip_h"]), (tr("Elimina"), a["delete"]), (tr("Inquadra"), a["fit_sel"])]
+            # 0.20.3: foto e forma chiusa → «Ritaglia»; foto ritagliata → «Foto intera» (al posto di In tracciato)
+            clip_ok, unclip_ok = win._clip_states(ed.selection)
+            if clip_ok or unclip_ok:
+                items[4] = (tr("Foto intera"), a["photo_unclip"]) if unclip_ok else (tr("Ritaglia"), a["photo_clip"])
         else:
             title = tr("Piano")
             items = [(tr("Incolla"), a["paste"]), (tr("Tutto"), a["select_all"]), (tr("Forme"), win.tool_actions["special"]),

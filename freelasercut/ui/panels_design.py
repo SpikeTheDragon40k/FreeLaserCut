@@ -2,7 +2,7 @@
 """Pannelli di progettazione: barra numerica, tavolozza livelli, livelli/impostazioni di taglio, proprietà forma."""
 import math
 
-from PySide6.QtCore import QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QFormLayout, QFrame, QGridLayout,
@@ -84,10 +84,15 @@ class NumericBar(QToolBar):
         self.anchor.setProperty("help_key", "num:anchor")
         self.anchor.changed.connect(lambda _: self.refresh())
         self.addWidget(self.anchor)
-        self.fx = self._field("X", suffix=" mm", help_key="num:x")
-        self.fy = self._field("Y", suffix=" mm", help_key="num:y")
+        # 0.20.3: ogni campo è largo quanto serve al numero più lungo che ci si aspetta (NumField.fit_text; «8» = una
+        # cifra). Dalla 0.19.6 le freccette toglievano 10 px e la prima cifra di «310.33 mm» usciva tagliata.
+        # Classica (il posto c'è: lo cede la scritta del tipo di forma, in fondo): quattro cifre intere, o tre con il
+        # segno. Banco (barra stretta, vedi set_compact): tre cifre intere.
+        self._fits = []
+        self.fx = self._field("X", suffix=" mm", help_key="num:x", fit=("8888.88 mm", "-888.88 mm"), tight=("888.88 mm",))
+        self.fy = self._field("Y", suffix=" mm", help_key="num:y", fit=("8888.88 mm", "-888.88 mm"), tight=("888.88 mm",))
         self.addSeparator()
-        self.fw = self._field("L", suffix=" mm", minimum=0.001, help_key="num:w")
+        self.fw = self._field("L", suffix=" mm", minimum=0.001, help_key="num:w", fit=("8888.88 mm",), tight=("888.88 mm",))
         self.lock = QToolButton()
         self.lock.setObjectName("minilock")
         self.lock.setCheckable(True)
@@ -98,9 +103,10 @@ class NumericBar(QToolBar):
         self.lock.toggled.connect(self._lock_icon)
         self._lock_icon(True)
         self.addWidget(self.lock)
-        self.fh = self._field("A", suffix=" mm", minimum=0.001, help_key="num:h")
+        self.fh = self._field("A", suffix=" mm", minimum=0.001, help_key="num:h", fit=("8888.88 mm",), tight=("888.88 mm",))
         # 0.18.2: raggio degli angoli accanto alle misure (rettangoli, poligoni e stelle), più i quattro angoli
-        self.frad = self._field("R", suffix=" mm", width=66, minimum=0.0, step=0.5, help_key="num:radius")
+        self.frad = self._field("R", suffix=" mm", width=66, minimum=0.0, step=0.5, help_key="num:radius",
+                                fit=("888.88 mm",), tight=("88.88 mm",))
         self.btn_corners = QToolButton()
         self.btn_corners.setObjectName("minilock")
         self.btn_corners.setFixedSize(18, 18)
@@ -112,7 +118,8 @@ class NumericBar(QToolBar):
         self.addWidget(self.btn_corners)
         self.corners = CornerPopup(self)
         self.addSeparator()
-        self.fr = self._field("↻", decimals=2, suffix="°", step=1.0, width=58, help_key="num:rot")
+        self.fr = self._field("↻", decimals=2, suffix="°", step=1.0, width=58, help_key="num:rot", fit=("-888.88°",),
+                              tight=("-888.88°",))
         self.addSeparator()
         # ---- comandi rapidi sulla selezione (spazio libero a destra)
         lab = QLabel(tr("Livello"))
@@ -155,7 +162,16 @@ class NumericBar(QToolBar):
         self.lock.setToolTip(tr("Proporzioni bloccate: larghezza e altezza cambiano insieme (clic per sbloccare)") if on
                              else tr("Proporzioni libere: larghezza e altezza indipendenti (clic per bloccare)"))
 
-    def _field(self, label, decimals=2, suffix="", step=1.0, width=76, minimum=None, help_key=None):
+    def set_compact(self, on=True):
+        """0.20.3: campi alla misura stretta (Banco, dove la barra sta sopra il piano e ha poco posto) o a quella
+        larga (Classica)."""
+        for f, wide, tight in self._fits:
+            f.fit_text(*(tight if on else wide))
+        for lab in self.findChildren(QLabel):
+            if lab.objectName() == "numlabel":  # senza il rientro che Qt aggiunge al testo delle etichette
+                lab.setIndent(0 if on else -1)
+
+    def _field(self, label, decimals=2, suffix="", step=1.0, width=76, minimum=None, help_key=None, fit=(), tight=()):
         lab = QLabel(label)
         lab.setObjectName("numlabel")
         self.addWidget(lab)
@@ -163,6 +179,9 @@ class NumericBar(QToolBar):
         f.setObjectName("numbar")
         f.setFixedHeight(self.FIELD_H)
         f.enable_arrows(arrow_step)  # 0.19.6: freccette discrete dentro il campo (passo dalle Preferenze)
+        if fit:
+            f.fit_text(*fit)  # 0.20.3: dopo le freccette, che tolgono posto al testo
+            self._fits.append((f, fit, tight or fit))
         if help_key:
             f.setProperty("help_key", help_key)
             lab.setProperty("help_key", help_key)
@@ -459,6 +478,48 @@ class PaletteBar(QToolBar):
 
 
 # ======================================================================= livelli
+class FontCombo(QComboBox):
+    """0.20.3: tendina dei caratteri che dice su quale voce sei mentre è aperta (mouse o frecce), così il testo sul
+    piano si può vedere con quel carattere prima di sceglierlo. `hovered`: nome del carattere, None quando la tendina
+    si chiude (scelta fatta o no: l'anteprima finisce sempre lì)."""
+
+    hovered = Signal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._open = False
+        self.highlighted.connect(self._on_highlight)
+
+    def _on_highlight(self, i):
+        if self._open:
+            data = self.itemData(i)
+            if data:  # le intestazioni dei gruppi non sono caratteri
+                self.hovered.emit(data)
+
+    def showPopup(self):
+        self._open = True
+        super().showPopup()
+        box = self.view().window()  # la finestrella dell'elenco: qualunque cosa la chiuda, l'anteprima finisce
+        if box is not self.window() and not getattr(self, "_watched", False):
+            box.installEventFilter(self)
+            self._watched = True
+
+    def _closed(self):
+        was = self._open
+        self._open = False
+        if was:
+            self.hovered.emit(None)
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Type.Hide:  # chiuso da Qt senza passare da hidePopup (clic fuori, finestra che cambia)
+            self._closed()
+        return super().eventFilter(obj, ev)
+
+    def hidePopup(self):
+        self._closed()  # prima di chiudere: se una voce è stata scelta, il cambio vero arriva dopo, dal testo com'era
+        super().hidePopup()
+
+
 def _spin(lo, hi, val, dec=1, step=1.0, suffix=""):
     w = QDoubleSpinBox()
     w.setRange(lo, hi)
@@ -1380,7 +1441,7 @@ class PropertiesPanel(QScrollArea):
     def _font_controls(self, d, shape):
         """Controlli carattere: d = dizionario di valori (default o forma)."""
         f = self._form()
-        fam = QComboBox()
+        fam = FontCombo()
         fam.setEditable(False)
         fam.setMaxVisibleItems(24)
         fam.addItem(tr("— Linea singola (incisione veloce) —"))
@@ -1429,12 +1490,19 @@ class PropertiesPanel(QScrollArea):
         weld.setChecked(d["weld"])
         weld.setToolTip(tr("Unisce le lettere che si toccano: nessuna doppia bruciatura nei corsivi"))
         ls = _spin(-50, 50, d["letter_spacing"], 2, 0.1, " mm")
+        ls.setToolTip(tr("Spaziatura orizzontale: mm in più (o in meno, con un valore negativo) fra una lettera e "
+                         "l'altra. 0 = quella del carattere."))
         lsp = _spin(0.3, 5, d["line_spacing"], 2, 0.1, " ×")
+        lsp.setToolTip(tr("Spaziatura verticale: distanza fra una riga e l'altra. 1 = normale (una volta e mezza "
+                          "l'altezza delle maiuscole), 2 = il doppio."))
+        fam.setToolTip(tr("Apri l'elenco e passa sui nomi (o usa le frecce): il testo selezionato si vede sul piano "
+                          "con quel carattere; cambia davvero solo quando fai clic su un nome."))
+        self.font_combo, self.letter_spin, self.line_spin = fam, ls, lsp
         f.addRow(tr("Carattere"), fam)
         f.addRow(tr("Altezza"), row(size, bold, italic))
         f.addRow(tr("Allineamento"), row(*al_row))
         f.addRow(tr("Spaziatura lettere"), ls)
-        f.addRow(tr("Interlinea"), lsp)
+        f.addRow(tr("Spaziatura righe"), lsp)
         f.addRow("", row(upper, weld))
         arc = _spin(-360, 360, d.get("arc", 0.0), 0, 15, "°")
         arc.setToolTip(tr("Testo curvo: ampiezza dell'arco occupato dal testo.\n"
@@ -1449,7 +1517,8 @@ class PropertiesPanel(QScrollArea):
                 arc_info.setText(tr("dritto") if not arc.value() else "")
                 return
             plain = textmod.text_path(shape.shown_text(), shape.family, shape.size, shape.bold, shape.italic,
-                                      shape.align, shape.letter_spacing, shape.line_spacing, shape.upper)
+                                      shape.align, shape.letter_spacing, shape.line_spacing, shape.upper,
+                                      shape.spacing_legacy)
             r = textmod.bend_radius(plain, shape.arc)
             arc_info.setText(tr("Ø {0:.1f} mm", abs(r) * 2))
         arc_text()
@@ -1460,7 +1529,34 @@ class PropertiesPanel(QScrollArea):
             if shape is not None:
                 self.ed.modify(shape, label, **{key: val})
 
-        fam.currentIndexChanged.connect(lambda _: fam.currentData() and set_("family", fam.currentData()))
+        # 0.20.3: anteprima del carattere sul testo vero mentre scorri l'elenco. Non entra nella cronologia: alla
+        # chiusura dell'elenco il testo torna com'era, poi (se hai scelto) arriva il cambio vero, annullabile.
+        peek = {"orig": None}
+
+        def preview(name):
+            if shape is None:
+                return
+            if name is None:
+                if peek["orig"] is not None:
+                    shape.family, peek["orig"] = peek["orig"], None
+                    shape.invalidate()
+                    self.ed.preview_changed()
+                return
+            if peek["orig"] is None:
+                peek["orig"] = shape.family
+            if shape.family != name:
+                shape.family = name
+                shape.invalidate()
+                self.ed.preview_changed()
+
+        fam.hovered.connect(preview)
+        fam.destroyed.connect(lambda *_: preview(None))  # pannello rifatto con l'elenco aperto: il testo torna com'era
+
+        def choose(_i):
+            preview(None)  # comunque sia arrivata la scelta, il cambio vero parte dal testo com'era
+            if fam.currentData():
+                set_("family", fam.currentData())
+        fam.currentIndexChanged.connect(choose)
         size.valueChanged.connect(lambda v: set_("size", v, tr("Altezza testo")))
         bold.toggled.connect(lambda v: set_("bold", v))
         italic.toggled.connect(lambda v: set_("italic", v))

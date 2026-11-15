@@ -1,5 +1,33 @@
 # Novità di FreeLaserCut
 
+## 0.20.3 — 15/11/2026
+Telecamera della testa e del piano che si scelgono sempre, calibrazione sempre rifacibile, schizzo del soggetto che parte da vuoto, foto ritagliate a forma (anche con una forma del disegno), anteprima del carattere sul testo vero, spaziatura delle lettere corretta.
+
+**Telecamere: decidi tu quale è della testa e quale guarda il piano.** Nella 0.20.2, con una telecamera sola, FreeLaserCut la prendeva da solo come camera del piano e nell'elenco della camera della testa restava bloccata: non si poteva scegliere, e senza camera della testa aperta «Calibra» restava spento. Ora:
+- in *Impostazioni → Camera della testa…* e nella scheda *Camera* **si possono scegliere tutte le telecamere collegate**. Se scegli per la testa quella che ora è la camera del piano, passa alla testa (e viceversa): negli elenchi è segnata «ora camera del piano» / «ora camera della testa»;
+- la telecamera scelta per la testa **non viene più presa da sola per il piano**, e si riapre all'avvio anche se sul piano hai scelto «Nessuna telecamera» (prima il suo elenco restava vuoto finché non premevi ⟳ nella scheda Camera);
+- nel riquadro della camera della testa c'è anche **⟳** per cercare di nuovo le telecamere, e una riga dice qual è la camera del piano; nella scheda Camera una riga dice qual è la camera della testa, con il collegamento per sceglierla o calibrarla;
+- **«Calibra» si può sempre premere**, anche con una calibrazione già fatta (il pulsante diventa «Calibra di nuovo…»): se manca qualcosa (telecamera non scelta, laser non connesso) lo dice, invece di restare spento. Lo stesso per la calibrazione della camera del piano, e la vista della testa dice perché i suoi comandi sono spenti;
+- una **calibrazione nuova non viene più scartata da sola**: se risulta meno precisa di quella di prima FreeLaserCut lo dice e chiede quale tenere (chi la rifà di solito ha spostato o rimesso a fuoco la camera).
+
+**Testo: il carattere si prova prima di sceglierlo.** Con un testo selezionato apri l'elenco dei caratteri e passa con il mouse sui nomi (o scorri con le frecce): **il tuo testo, sul piano, si vede con il carattere su cui sei**. Cambia davvero solo quando fai clic su un nome, con un passo solo di Annulla; se chiudi l'elenco senza scegliere (Esc, clic fuori) il testo torna com'era.
+
+**Spaziatura delle lettere e delle righe.** Sono nel pannello del testo, sotto il carattere: *Spaziatura lettere* (orizzontale, in mm, anche negativa) e *Spaziatura righe* (verticale; prima si chiamava «Interlinea», come la distanza fra le righe del laser). Corretta quella delle lettere:
+- con i caratteri a linea singola, appena si usciva da 0 il testo **saltava** di qualche mm (su «Ciao mondo» alto 10 mm fino a 7 mm): ora ogni lettera avanza della sua larghezza vera più la spaziatura, e la riga si allunga esattamente di spaziatura × (lettere − 1);
+- i testi **centrati o allineati a destra** si spostavano di mezza o di una spaziatura: ora il centro, o il lato destro, resta fermo;
+- i testi salvati prima con una spaziatura diversa da zero **restano identici** a com'erano; prendono la spaziatura corretta se la riporti a 0 e la rimetti.
+
+**Schizzo del soggetto: si può partire da vuoto** (richiesta di Evoluzione2). In *Prepara foto*, casella nuova **«Trova il soggetto da solo»** (accesa di partenza: tutto come prima). Spenta, il soggetto parte vuoto e resta **solo quello che dipingi con Tieni**, anche solo una parte di quello che la ricerca avrebbe trovato; Togli cancella, il Riquadro limita la zona, «Segui i bordi» allarga la pennellata alla parte attaccata, vicino al pennello. «Togli gli aiuti» torna alla partenza della casella scelta. Con la casella spenta e niente dipinto l'anteprima lo dice («Dipingi con Tieni il soggetto…») invece di mostrare un foglio bianco. La scelta si salva con la foto.
+
+**Foto ritagliata a forma** (richiesta di Evoluzione2):
+- in *Prepara foto → Forma*, oltre a rettangolo, ovale e angoli arrotondati: **cerchio, cuore, stella, nuvola, esagono**. Sono le stesse forme che si disegnano sul piano, la più grande che sta nella foto, al centro, con le loro proporzioni (un cuore non si schiaccia in una foto larga); «Bordi sfumati» vale anche per loro;
+- **Ritaglia la foto con la forma** (menu *Disponi*, tasto destro, nel Banco in *Combina* e nel menu radiale): selezioni una foto e una forma chiusa che le sta sopra (una forma della galleria, un testo, un tracciato disegnato a mano) e la foto **si vede e si incide solo dentro la forma**, anche in negativo, con i retini e con la foto ruotata o specchiata. La forma resta come contorno sul livello che non si incide (per tagliarla basta metterla su un livello che esce) e va in un gruppo con la foto, così si spostano insieme. Hai modificato la forma? Seleziona il gruppo e ripeti il comando. **Togli il ritaglio** rimette tutto com'era: foto intera, gruppo separato, forma sul suo livello. *Prepara foto* funziona anche sul gruppo ritagliato e la sagoma resta al suo posto.
+
+**Corrette:**
+- nelle caselle **X, Y, L, A** della barra delle misure, da quando ci sono le freccette, la **prima cifra di un numero a tre cifre usciva tagliata** a sinistra («310.33 mm»); lo stesso per il raggio a due cifre e per gli angoli negativi. Ora ogni casella è larga quanto serve al suo numero, con il carattere del tuo sistema: nell'interfaccia classica anche quattro cifre o tre con il segno (il posto lo cede la scritta del tipo di forma, in fondo alla barra); nel Banco tre cifre, con le lettere un po' più vicine alle caselle, così nella barra entra quello che entrava prima;
+- una **foto ruotata** (non di 90°) incisa **in negativo**, o con la luminosità alzata o il contrasto abbassato, accendeva il laser anche negli angoli del riquadro che la contiene, fuori dalla foto. Ora fuori dalla foto il laser resta spento. Le foto dritte, e quelle ruotate senza negativo né regolazioni, danno lo stesso G-code di prima;
+- lo **Schizzo del soggetto** su una foto girata di 90° o 270° poteva uscire tutto scuro (un valore sbagliato nei conti dei toni).
+
 ## 0.20.2 — 15/11/2026
 Calibrazione completa della camera della testa, la camera della testa che aiuta quella del piano, pausa fra un livello e l'altro, linee piatte che non restano più fuori dalla selezione.
 

@@ -1,7 +1,7 @@
 # Prove automatiche di FreeLaserCut, per area
 
 Generato da `tests/run_tests.py` (non modificare a mano): ogni suite sta nell'area della sua descrizione.
-Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
+Suite: 185. Lancio completo: `python tests/run_tests.py`; una sola: `python tests/<file> [banco]`.
 
 ## Wi-Fi, rete e telefono (12)
 
@@ -18,7 +18,7 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v192_wifi.py`: Wi-Fi delle Longer: interruttore «$50», messaggi e attesa della scheda vera
 - `test_v192_wifi.py` (Banco): Wi-Fi delle Longer nell'interfaccia Banco
 
-## Telecamera e guardia fiamme (10)
+## Telecamera e guardia fiamme (12)
 
 - `test_v107.py`: Telecamera: la scelta si ricorda, «Nessuna» non accende la webcam
 - `test_v111.py`: Fiamma con il cuore bianco, nomi sotto i comandi
@@ -27,6 +27,8 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v181_camera.py` (Banco): Telecamere del Falcon A1 nell'interfaccia Banco
 - `test_v200_camera_testa.py`: Camera della testa: calibrazione col puntino inciso, laser e camera dove vuoi, origine dalla camera, tavola da due angoli, foto del piano a mosaico, telecamere cercate di nuovo
 - `test_v200_camera_testa.py` (Banco): Camera della testa nell'interfaccia Banco
+- `test_v203_telecamere.py`: Telecamera della testa e del piano: si scelgono sempre (quella già usata passa di qua), «Calibra» sempre possibile, calibrazione nuova mai scartata senza chiedere
+- `test_v203_telecamere.py` (Banco): Scelta delle telecamere e calibrazione sempre possibile nell'interfaccia Banco
 - `test_v201_lentezza.py`: Telecamera USB a riposo quando nessuno la guarda, rallentamenti nel registro e nel rapporto
 - `test_v202_camera_testa.py`: Calibrazione completa della camera della testa (griglia incisa, lente, inclinazione, verifica onesta), mosaico preciso, camera del piano aiutata, vista raddrizzata e zoom, crocetta dal centro camera
 - `test_v202_camera_testa.py` (Banco): Calibrazione completa e vista della testa nell'interfaccia Banco
@@ -56,7 +58,7 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v160.py` (Banco): Materiali imparati nell'interfaccia Banco
 - `test_v192_analisi.py`: Scorciatoie valide, ordine dei tagli, preparazione del lavoro con Annulla, materiali per potenza, Preferenze, ricerca comandi, anteprime
 
-## Foto e immagini (15)
+## Foto e immagini (19)
 
 - `test_v10.py`: Foto veloci, Prepara foto, foto in linee e riempimento, prova foto
 - `test_v102.py`: Anteprima che non copre la foto, zoom a punti veri in Prepara foto
@@ -73,8 +75,12 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v172.py` (Banco): Area non credibile, foto fitte e override nell'interfaccia Banco
 - `test_v176.py`: Pennelli precisi dello Schizzo del soggetto, velo rosso; il simulatore non tocca il profilo
 - `test_v190_mezzetinte.py`: Mezzetinte: dimensione del punto e misure collegate
+- `test_v203_soggetto.py`: Schizzo del soggetto: ricerca automatica che si spegne, il soggetto parte vuoto e resta solo quello dipinto con Tieni
+- `test_v203_soggetto.py` (Banco): Schizzo del soggetto che parte da vuoto nell'interfaccia Banco
+- `test_v203_ritaglio.py`: Foto ritagliata a forma: cuore, stella, nuvola, cerchio ed esagono in Prepara foto, ritaglio con una forma del disegno, foto ruotata in negativo che non incide fuori
+- `test_v203_ritaglio.py` (Banco): Foto ritagliata a forma nell'interfaccia Banco
 
-## Lavoro e G-code (22)
+## Lavoro e G-code (25)
 
 - `test_gcode.py`: Generatore G-code (eseguito sul simulatore)
 - `test_controller.py`: Controller: verifica, errori, override, ripresa, fire
@@ -97,6 +103,9 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v196_varie.py`: DXF con valori vuoti, freccette nei campi della barra, vista di ogni piano, G-code CRLF
 - `test_v201_aria.py`: Air assist delle schede MKS DLC32 (M7) e scelta dell'aria che resta rifacendo il profilo
 - `test_v201_aria.py` (Banco): Air assist delle MKS DLC32 nell'interfaccia Banco
+- `test_v203_testo.py`: Testo: anteprima del carattere sul testo vero scorrendo l'elenco, spaziatura delle lettere senza salti e delle righe
+- `test_v203_testo.py` (Banco): Testo: anteprima del carattere e spaziature nell'interfaccia Banco
+- `test_v203_misure.py`: Barra delle misure: caselle X, Y, L, A, R e rotazione larghe quanto serve al numero (la prima cifra non esce più tagliata)
 - `test_v202_pausa.py`: Pausa prima di un livello: G-code con M0, invio diretto che si ferma e riprende, Annulla durante la pausa
 
 ## Macchina, connessione e profili (40)
@@ -168,7 +177,7 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v202_linee_piatte.py`: Linee orizzontali, verticali e punti dentro la selezione col rettangolo e negli ingombri
 - `test_v202_linee_piatte.py` (Banco): Linee piatte nella selezione nell'interfaccia Banco
 
-## Interfaccia (25)
+## Interfaccia (26)
 
 - `test_v06.py`: Lingue: inglese, italiano, spagnolo, francese, portoghese
 - `test_v07.py`: Interfaccia Banco: ricerca comandi, strati, percorso, menu radiale, cabina, Officina
@@ -191,6 +200,7 @@ Suite: 175. Lancio completo: `python tests/run_tests.py`; una sola: `python test
 - `test_v200_nomi.py` (Banco): Nome del progetto e file di provenienza nell'interfaccia Banco
 - `test_v202_barra.py`: Barra in basso: «File: …» leggibile, posizione e velocità vuote senza spazio, laser collegato senza allargare
 - `test_v202_barra.py` (Banco): Barra in basso leggibile nell'interfaccia Banco
+- `test_v203_misure.py` (Banco): Barra delle misure nell'interfaccia Banco: numeri interi senza allargare la barra
 - `test_v201_finestra.py`: La finestra non si allarga mai oltre lo schermo (scritta «File:» della barra in basso), in tutte le lingue
 - `test_v201_finestra.py` (Banco): Finestra che resta nello schermo nell'interfaccia Banco
 - `test_v201_nomi.py` (Banco): Nome del progetto che segue i file nell'interfaccia Banco
