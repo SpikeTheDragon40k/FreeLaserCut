@@ -56,9 +56,14 @@ class ShrinkLabel(QLabel):
     """0.20.1: scritta della barra in basso che non chiede mai spazio: larghezza minima 0, al massimo la sua
     larghezza massima; il testo che non ci sta si accorcia nel mezzo con «…». Il testo intero resta in fullText()."""
 
-    def __init__(self, text="", parent=None):
+    def __init__(self, text="", parent=None, reserve=0, elide=Qt.ElideMiddle):
         super().__init__(parent)
         self._full = ""
+        # 0.20.2: «reserve» = larghezza tenuta quando c'è un testo (numeri che cambiano: il resto non si sposta);
+        # senza testo la scritta non occupa niente (Evoluzione2, 15/11: con il laser scollegato la posizione della
+        # testa e la velocità, vuote, tenevano 550 px e alla scritta «File: …» non restava spazio)
+        self._reserve = int(reserve)
+        self._elide_mode = elide
         self.setText(text)
 
     def setText(self, text):
@@ -71,7 +76,7 @@ class ShrinkLabel(QLabel):
 
     def _elide(self):
         room = max(self.width() - 2, 0) if self.isVisible() else self.maximumWidth()
-        QLabel.setText(self, self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, room))
+        QLabel.setText(self, self.fontMetrics().elidedText(self._full, self._elide_mode, room))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -84,7 +89,11 @@ class ShrinkLabel(QLabel):
     def sizeHint(self):
         h = super().sizeHint().height()
         m = self.contentsMargins()
+        if not self._full:
+            return QSize(0, h)
         want = self.fontMetrics().horizontalAdvance(self._full) + m.left() + m.right() + 4
+        if self._reserve:
+            want = max(want, self._reserve)
         return QSize(min(want, self.maximumWidth()), h)
 
     def minimumSizeHint(self):
@@ -407,6 +416,9 @@ class MainWindow(QMainWindow):
             "head_cam": A(tr("Vista della testa…"), lambda *_: self.head_camera_window(), None, None,
                           tr("Video della telecamera fissata alla testa, con mirino e righello: porta il laser o la "
                              "camera dove vuoi, prendi gli angoli della tavola, fai la foto del piano a mosaico")),
+            "clear_mosaic": A(tr("Togli la foto a mosaico dal piano"), lambda *_: self.camera.head.clear_mosaic(), None,
+                              None, tr("Toglie da sotto il piano la foto fatta con la camera della testa (si può "
+                                       "rifare quando vuoi)")),
             "head_cam_setup": A(tr("Camera della testa…"), lambda *_: self.head_camera_setup(), None, None,
                                 tr("Scelta e calibrazione della telecamera fissata alla testa del laser")),
             "head_laser_here": A(tr("Porta il laser qui"), lambda *_: self.head_here("laser"), None, None,
@@ -653,7 +665,7 @@ class MainWindow(QMainWindow):
             ("§", tr("Configurazione della macchina")), "identify", "serial_speed", "scan_offset", "autofocus",
             "board_backup", "profile_export", "profile_import"])
         self.m_view = menu(tr("&Visualizza"), ["zoom_in", "zoom_out", "fit", "fit_sel", "-", "filled", "grid", "light_bed",
-                                           "snap_grid", "snap_obj", "dither_prev"])
+                                           "snap_grid", "snap_obj", "dither_prev", "-", "clear_mosaic"])
         self.m_view.addSeparator()
         self.m_panels = self.m_view.addMenu(tr("Pannelli"))
         self.m_view.addAction(tr("Ripristina la disposizione dei pannelli"), lambda: self.reset_layout())
@@ -1182,8 +1194,14 @@ class MainWindow(QMainWindow):
         self.lbl_cursor = fixed(tr("X -0000.00  Y -0000.00 mm"))
         self.lbl_cursor.setText("X —  Y —")
         self.lbl_zoom = fixed("00000%")
-        self.lbl_head = fixed("testa -000.00, -000.00  ·  lavoro -000.00, -000.00")
-        self.lbl_fs = fixed("F 00000 mm/min · potenza 000%")
+        def reserved(sample):  # 0.20.2: come fixed(), ma vuota non occupa spazio e, se lo spazio manca, si accorcia
+            lab = ShrinkLabel("", reserve=fm.horizontalAdvance(sample) + 14, elide=Qt.ElideRight)
+            lab.setStyleSheet(mono)
+            lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            return lab
+
+        self.lbl_head = reserved("testa -000.00, -000.00  ·  lavoro -000.00, -000.00")
+        self.lbl_fs = reserved("F 00000 mm/min · potenza 000%")
         self.lbl_fs.setObjectName("muted")
         self.sb_machine = QPushButton(tr("○  Laser non connesso"))
         self.sb_machine.setFlat(True)
@@ -1276,6 +1294,8 @@ class MainWindow(QMainWindow):
         ctl.job_error.connect(self._job_error)
         ctl.g55_refused.connect(self._g55_refused)
         ctl.job_finished.connect(self._job_finished)
+        ctl.user_pause.connect(self._user_pause)  # 0.20.2: pausa prima di un livello
+        ctl.user_resumed.connect(self._user_resumed)
         # offset G54 della scheda: serve ai test (materiale, scansione) sulle schede senza G55
         ctl.status_changed.connect(lambda _st: setattr(self.profile, "wcs_offset", self.ctl.wco))
         self._update_undo()
@@ -3430,6 +3450,49 @@ class MainWindow(QMainWindow):
         else:
             self.ctl.resume()
 
+    def _user_pause(self, msg):
+        """0.20.2: il lavoro è fermo a una pausa fra i livelli (laser e aria spenti). Finestra non bloccante: il resto
+        del programma resta usabile (frecce, Lucciola per controllare il pezzo)."""
+        from PySide6.QtWidgets import QMessageBox
+
+        box = getattr(self, "_pause_box", None)
+        if box is not None:
+            box.hide()  # (close() su una QMessageBox senza tasto Esc viene ignorato)
+            box.deleteLater()
+        box = QMessageBox(self)
+        box.setWindowTitle(tr("Lavoro in pausa"))
+        box.setIcon(QMessageBox.Information)
+        box.setText(msg)
+        box.setInformativeText(tr("La macchina è ferma, laser e aria spenti. Quando hai finito premi Riprendi: il "
+                                  "lavoro continua dal livello successivo."))
+        b_go = box.addButton(tr("Riprendi"), QMessageBox.AcceptRole)
+        b_stop = box.addButton(tr("Annulla il lavoro"), QMessageBox.DestructiveRole)
+        box.setModal(False)
+
+        def done(btn):
+            self._pause_box = None
+            if btn is b_go:
+                if not self.ctl.resume_user_pause():
+                    self.statusBar().showMessage(tr("Il lavoro non è più in pausa"), 6000)
+            elif btn is b_stop:
+                self.ctl.stop_job()
+
+        box.buttonClicked.connect(done)
+        self._pause_box = box
+        self.statusBar().showMessage(tr("In pausa: {0}", msg), 0)
+        box.show()
+        QApplication.beep()
+        return box
+
+    def _user_resumed(self):
+        """Ripreso (anche con «Riprendi» della barra o dal telefono): la finestra della pausa non serve più."""
+        box = getattr(self, "_pause_box", None)
+        if box is not None:
+            self._pause_box = None
+            box.hide()
+            box.deleteLater()
+        self.statusBar().clearMessage()
+
     def _g55_refused(self, how):
         """0.19.2: nel lavoro la scheda ha rifiutato G55, o proprio su quella riga ha smesso di rispondere (un OMTech
         K40 fa l'una o l'altra cosa). G55 sta nell'intestazione, prima di ogni incisione. Il lavoro è già fermato, il profilo viene segnato «senza G55» e lo si dice: al
@@ -3453,6 +3516,11 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, tr("Lavoro fermato"), msg)
 
     def _job_finished(self, ok, msg):
+        box = getattr(self, "_pause_box", None)
+        if box is not None:  # lavoro finito o fermato durante la pausa: la finestra non serve più
+            self._pause_box = None
+            box.hide()
+            box.deleteLater()
         self.laser.update_running()
         plate, self._job_plate = self._job_plate, None
         self.plate_bar.refresh()
