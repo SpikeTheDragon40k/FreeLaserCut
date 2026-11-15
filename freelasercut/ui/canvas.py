@@ -26,6 +26,9 @@ from freelasercut.i18n import tr  # noqa: E402
 BURN = "#FF8A3D"
 RULER = 20  # px
 TOOL_LAYER_COLOR = "#8A9BBE"
+# aspetto della selezione (pixel dello schermo): alone trasparente + linea piena
+SEL_HALO_W, SEL_HALO_ALPHA, SEL_LINE_W = 7.0, 85, 2.0
+SEL_HALO_MAX = 400  # oltre questo numero di forme selezionate solo la linea piena (il piano resta veloce)
 
 
 def _default_family():
@@ -228,6 +231,33 @@ class HeadItem(QGraphicsItem):
             p.drawText(r, Qt.AlignHCenter | Qt.AlignTop, self.label)
 
 
+CAM_CENTER = "#2ED3B7"  # 0.20.0: punto sotto il mirino della camera della testa
+BOARD = "#F5B83D"  # 0.20.0: tavola presa da due angoli
+
+
+class CamCenterItem(QGraphicsItem):
+    """0.20.0: il punto del piano sotto il mirino della camera della testa (quadratino verde acqua con il mirino)."""
+
+    def __init__(self):
+        super().__init__()
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations)
+        self.setZValue(995)
+
+    def boundingRect(self):
+        return QRectF(-14, -14, 28, 28)
+
+    def paint(self, p, option, widget=None):
+        p.setRenderHint(QPainter.Antialiasing)
+        col = QColor(CAM_CENTER)
+        p.setPen(QPen(QColor(0, 0, 0, 140), 3))
+        p.setBrush(Qt.NoBrush)
+        p.drawRect(QRectF(-6, -6, 12, 12))
+        p.setPen(QPen(col, 1.6))
+        p.drawRect(QRectF(-6, -6, 12, 12))
+        for a, b in (((-12, 0), (-6, 0)), ((6, 0), (12, 0)), ((0, -12), (0, -6)), ((0, 6), (0, 12))):
+            p.drawLine(QPointF(*a), QPointF(*b))
+
+
 ANCHOR = "#FF3DB4"  # punto di partenza del lavoro: colore diverso dalla testa (che si muove con il laser)
 
 
@@ -327,7 +357,7 @@ class Canvas(QGraphicsView):
     edit_text = Signal(object)
     tool_changed = Signal(str)
     tool_lock_changed = Signal(str)  # 0.19.0: nome dello strumento bloccato, "" quando si sblocca
-    LOCKABLE = ("line", "rect", "ellipse", "polygon", "star", "special")  # gli strumenti che disegnano forme e linee
+    LOCKABLE = ("line", "freehand", "rect", "ellipse", "polygon", "star", "special")  # gli strumenti che disegnano forme e linee
     status = Signal(str)
     zoom_changed = Signal(float)
     context_requested = Signal(object, object)  # tasto destro senza trascinare: punto nella vista, punto sullo schermo
@@ -378,6 +408,17 @@ class Canvas(QGraphicsView):
         self._anchor = AnchorItem()
         self.scene().addItem(self._anchor)
         self._anchor.setVisible(False)
+        # 0.20.0: camera della testa (punto sotto il mirino) e tavola presa da due angoli
+        self._cam_center = CamCenterItem()
+        self.scene().addItem(self._cam_center)
+        self._cam_center.setVisible(False)
+        self._board_item = QGraphicsPathItem()
+        bpen = QPen(QColor(BOARD), 1.6, Qt.DashLine)
+        bpen.setCosmetic(True)
+        self._board_item.setPen(bpen)
+        self._board_item.setZValue(980)
+        self.scene().addItem(self._board_item)
+        self._board_item.setVisible(False)
         # scritte e spiegazioni dei segni: la finestra decide (nomi sotto i comandi, modalità esperto, lavoro in corso)
         self.marker_labels = False
         self.hints_allowed = lambda: True
@@ -552,6 +593,20 @@ class Canvas(QGraphicsView):
         h, v = self.horizontalScrollBar(), self.verticalScrollBar()
         h.setValue(int(h.value() - dx))
         v.setValue(int(v.value() - dy))
+
+    def view_state(self):
+        """0.19.6: zoom e posizione della vista (per ricordarli piano per piano)."""
+        return (QTransform(self.transform()), self.horizontalScrollBar().value(), self.verticalScrollBar().value(),
+                self._user_zoomed)
+
+    def set_view_state(self, st):
+        tf, h, v, user = st
+        self.setTransform(tf)
+        self.horizontalScrollBar().setValue(h)
+        self.verticalScrollBar().setValue(v)
+        self._user_zoomed = user
+        self.zoom_changed.emit(self.scale_px())
+        self.viewport().update()
 
     def fit_bed(self):
         self._user_zoomed = False
@@ -981,14 +1036,22 @@ class Canvas(QGraphicsView):
         p.setRenderHint(QPainter.Antialiasing)
         tf = self.bed_to_view_tf()
         ed = self.editor
-        # contorno selezione (tratteggio animato fisso)
+        # contorno selezione (0.20.0, da un rapporto del 14/11: «il tratteggio si vede male»): alone largo e
+        # trasparente del colore d'accento sotto una linea piena, visibile anche sulle forme del livello blu
         if ed.selection:
-            p.setPen(cpen(C["accent_hi"], 1.2, Qt.DashLine))
             p.setBrush(Qt.NoBrush)
+            paths = []
             for s in ed.selection:
                 it = self.items_by_id.get(s.id)
                 path = it._path if it is not None and it.fb_shape is s and it._path is not None else s.path()
-                p.drawPath(tf.map(path))
+                paths.append(tf.map(path))
+            if len(paths) <= SEL_HALO_MAX:
+                p.setPen(cpen(C["accent"], SEL_HALO_W, Qt.SolidLine, SEL_HALO_ALPHA))
+                for vp in paths:
+                    p.drawPath(vp)
+            p.setPen(cpen(C["accent_hi"], SEL_LINE_W, Qt.SolidLine))
+            for vp in paths:
+                p.drawPath(vp)
         self.tool.draw(p, tf)
         if self.snap_hint is not None:
             pt, label = self.snap_hint
@@ -1225,6 +1288,48 @@ class Canvas(QGraphicsView):
             return None
         p = self._head.pos()
         return QPointF(p.x(), -p.y())
+
+    # ---------------------------------------------------------------- 0.20.0: camera della testa
+    def set_cam_center(self, x, y):
+        """Punto del piano sotto il mirino della camera della testa (None = nascosto)."""
+        if x is None or y is None:
+            if self._cam_center.isVisible():
+                self._cam_center.setVisible(False)
+            return
+        self._cam_center.setPos(QPointF(x, -y))
+        self._cam_center.setVisible(True)
+
+    def cam_center(self):
+        if not self._cam_center.isVisible():
+            return None
+        q = self._cam_center.pos()
+        return QPointF(q.x(), -q.y())
+
+    def set_board(self, a, b):
+        """Tavola presa da due angoli: i segni in A e B e i due lati che partono da A (lungo AB e perpendicolare)."""
+        path = QPainterPath()
+        if a is None and b is None:
+            self._board_item.setVisible(False)
+            self._board_item.setPath(path)
+            return
+        for c in (a, b):
+            if c is not None:
+                path.addEllipse(QPointF(c[0], -c[1]), 2.0, 2.0)
+        if a is not None and b is not None:
+            dx, dy = b[0] - a[0], b[1] - a[1]
+            d = math.hypot(dx, dy)
+            if d >= 1.0:
+                ux, uy = dx / d, dy / d
+                L = d + 40.0
+                path.moveTo(a[0], -a[1])
+                path.lineTo(a[0] + ux * L, -(a[1] + uy * L))
+                path.moveTo(a[0], -a[1])
+                path.lineTo(a[0] - uy * L, -(a[1] + ux * L))
+        self._board_item.setPath(path)
+        self._board_item.setVisible(True)
+
+    def board_shown(self):
+        return self._board_item.isVisible()
 
     def clear_trail(self):
         self._trail_path = QPainterPath()

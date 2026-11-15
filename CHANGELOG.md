@@ -1,5 +1,50 @@
 # Novità di FreeLaserCut
 
+## 0.20.0 — in sviluppo
+La camera della testa, tracciati più puliti, disegno a mano libera e varie comodità.
+
+**Camera della testa** (*Impostazioni → Camera della testa…* per sceglierla e calibrarla, *Laser → Vista della testa…* per usarla). Si sceglie la telecamera fissata alla testa; la camera del piano resta quella di prima e si usano insieme o da sole. La stessa telecamera non si può scegliere per tutte e due (nell'elenco dell'altra c'è, ma spenta). La camera della testa si legge a 1280 × 720, di preferenza in MJPG: con due camere sulla stessa USB serve meno banda.
+- **Calibrazione automatica.** Prima di iniziare FreeLaserCut chiede **dove hai montato la camera rispetto al laser**: una croce di frecce come il piano sullo schermo (a destra, in alto, in diagonale…, al centro «non lo so») e la distanza in cm. Da lì sceglie da solo **dove incidere il puntino**, in un punto da cui poi la camera riesce ad andarci sopra (con la camera 6 cm a destra, per esempio, mai nei primi 6 cm a sinistra del piano): se serve ci porta la testa e ti chiede di controllare che sotto ci sia il cartone. Poi guarda il materiale a laser spento, incide un puntino di circa 2 mm (20% di partenza) e lo cerca partendo dalla parte giusta. **Quando lo trova te lo mostra cerchiato e chiede se è lui**: se no, lo porti tu nel video con le frecce e ci fai clic. Poi lo segue spostando la testa, misura anche **la lente** (i grandangoli M12 stringono i bordi dell'immagine: FreeLaserCut lo corregge) e lo porta da solo sotto il mirino. Impara così scala, rotazione, specchio, lente e distanza fra il laser e il centro della camera. La calibrazione vale per la distanza fra camera e materiale con cui è fatta: se la camera è fissata alla parte che sale e scende per il fuoco resta valida con ogni spessore, altrimenti va rifatta quando lo spessore cambia molto.
+- **Vista della testa:** video dal vivo con mirino, righello in mm e il disegno sovrapposto. Un clic sul video porta lì il mirino.
+- **Comandi:** *Laser sul centro camera*, *Camera sul punto del laser*, *Origine qui (centro camera)* (per riprendere un lavoro dallo stesso punto). Sul piano un quadratino verde acqua segna il punto sotto il mirino; nel menu del tasto destro (Classica) *Porta il laser qui* e *Porta la camera della testa qui*. Vicino al bordo la testa si ferma e dice quanto manca. Durante un lavoro questi comandi non muovono la testa.
+- **Tavola da due angoli:** il mirino su un angolo della tavola (A) e su un altro angolo dello stesso lato (B). Con *Cerca l'angolo vicino al mirino* FreeLaserCut trova da solo il punto in cui si incontrano i due bordi (anche sul nido d'ape); se non lo trova usa il mirino e lo dice. La tavola si vede sul piano e *Appoggia la selezione sulla tavola* ruota il disegno come la tavola e lo mette nell'angolo A più il margine scelto, con un solo Annulla.
+- **Foto del piano a mosaico:** la testa passa sopra la zona scelta (tutto il piano, attorno alla selezione o la tavola) a laser spento, la camera fa una foto in ogni punto e le foto, unite in scala 1:1, vanno sotto il piano come la foto della camera del piano.
+
+**Le forme selezionate si vedono meglio** (da un rapporto del 14/11: «il tratteggio si vede male»). Il contorno della selezione non è più una linea tratteggiata sottile: è una linea piena del colore d'accento con un alone chiaro attorno, che si nota anche sulle forme del livello blu (prima avevano lo stesso colore della selezione). Con più di 400 forme selezionate resta solo la linea piena, perché il piano non rallenti.
+
+**Nome dei file:** importando un file in un progetto nuovo (per esempio *Pippo.svg*) il progetto prende il suo nome: si vede nel titolo e viene proposto da *Salva*, *Esporta SVG* e *Salva G-code*, invece di «Senza titolo» e «disegno». Ogni forma importata ricorda **il file da cui viene**: selezionandola, nella barra in basso compare «File: Pippo.svg» (con forme di più file, il primo e quanti altri; l'elenco completo passando sopra con il mouse). Vale anche dopo aver salvato e riaperto il progetto, per i duplicati e dentro i gruppi.
+
+**Schermata d'avvio:** il numero di versione si legge meglio, in arancio.
+
+**Telecamere:**
+- una telecamera collegata (o tolta) mentre FreeLaserCut è aperto viene trovata da sola, senza riavviare;
+- la scritta «Cerco le telecamere…» non resta più ferma: se la ricerca non risponde lo dice e ⟳ torna a funzionare;
+- la ricerca si ferma prima, dopo le telecamere che il sistema conosce: meno attesa all'avvio.
+
+Provato sul simulatore con una camera della testa simulata (dritta, ruotata, capovolta, specchiata, con lenti grandangolari e fotogrammi in ritardo): scostamento ritrovato entro 0,1 mm. **Provato sul Longer B1 con una U20CAM** (15/11, versione di prova): 0,079 mm per pixel, scostamento X +61,9 Y +2,8 mm, precisione ±0,22 mm.
+
+**Semplifica tracciati** (*Modifica → Semplifica tracciati…*, Ctrl+Alt+S, anche nel menu del tasto destro): ricostruisce i tracciati scelti con meno nodi, curve lisce e tratti dritti, senza scostarsi dall'originale più della **tolleranza** che scegli (da 0,01 a 5 mm, di partenza 0,1). Serve soprattutto dopo *Vettorizza immagine* e sui DXF fatti di migliaia di segmenti piccoli: i contorni seghettati diventano curve morbide.
+- Dove la linea cambia direzione più dell'angolo scelto (*Spigoli vivi sopra*, di partenza 40°) resta uno spigolo.
+- *Solo tratti dritti*: niente curve, solo segmenti; il file per la macchina diventa più corto.
+- Anteprima sul piano mentre cambi i valori, con i nodi e i tratti di G-code prima e dopo e lo scarto più grande misurato. OK = un solo Annulla; Annulla della finestra = tutto com'era.
+- Le linee aperte restano aperte e le chiuse chiuse; gli estremi e il punto di partenza del laser non si spostano; i fori restano fori. Un tracciato che non migliorerebbe resta com'è. Funziona anche dentro i gruppi e sulle forme ruotate, stirate o specchiate. Rettangoli, ellissi e testi restano come sono (prima *Converti in tracciato*).
+- Con tolleranze molto piccole le curve possono dare **più** righe di G-code dei segmenti di partenza: la finestra lo mostra, e *Solo tratti dritti* le riduce sempre.
+
+**Allinea e Distribuisci sui nodi:** con lo strumento Nodi e dei nodi scelti, i comandi *Disponi → Allinea* e *Distribuisci* lavorano sui nodi invece che sulle forme (per esempio per mettere in fila dei punti o raddrizzare un lato). Allinea serve almeno due nodi, Distribuisci tre (il primo e l'ultimo restano fermi). Le maniglie delle curve seguono il loro nodo, un solo Annulla, la scelta dei nodi resta. Anche nel menu del tasto destro dello strumento Nodi. Senza nodi scelti tutto funziona sulle forme come prima. Due nodi uno dopo l'altro portati nello stesso punto diventano uno solo.
+
+**Mano libera** (strumento nuovo, tasto **H**, dopo *Linee e curve*): premi e trascina, il tratto segue il mouse o la penna e al rilascio diventa un tracciato levigato sul livello corrente. Finisci sul punto di partenza per chiudere la forma. Esc o il tasto destro durante il tratto lo annullano; un clic senza trascinare non disegna niente. Il primo punto si aggancia come negli altri strumenti (Alt no). Doppio clic sull'icona per disegnare più tratti di fila. Un tratto che parte dall'estremo di una linea non la prolunga: si uniscono dopo con lo strumento Nodi (J).
+
+**Freccette nei campi X, Y, L, A, R e rotazione** della barra in alto: due triangolini discreti dentro il bordo destro del campo. Un clic cambia di 0,1 (mm o gradi), con Maiusc di 1, tenendo premuto ripete. Il passo si cambia nelle *Preferenze*. Tastiera e rotella restano come prima.
+
+**DXF scritti male** da alcuni programmi, con valori vuoti (l'errore «Invalid tag (code=62, value="")»): ora si importano lo stesso, con un avviso.
+
+**Piani di lavoro:** ogni piano ricorda il suo zoom e la sua posizione. *Sposta la selezione su un altro piano* anche dal menu del tasto destro (interfaccia classica).
+
+**G-code con il fine riga di Windows (CRLF)**, a scelta nelle *Preferenze* → *Lavoro*, per le schede e i programmi che lo chiedono.
+
+**Guida:** corrette le schede di *Allinea*: il riferimento è il bordo della selezione (o la forma bloccata), non l'ultima forma selezionata.
+
+
 ## 0.19.5 — 14/11/2026
 Nodi, movimento della testa con il joystick, Stampa e taglia per tutti.
 
