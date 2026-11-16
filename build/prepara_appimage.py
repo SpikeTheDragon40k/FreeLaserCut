@@ -47,9 +47,13 @@ PLATFORMS = [f"manylinux_2_{n}_x86_64" for n in range(GLIBC_MAX[1], 16, -1)] + [
 # si copiano accanto alle librerie di Qt, che le trovano da sole ($ORIGIN). Licenza MIT/X11.
 # 0.18.1: anche le estensioni di libxcb (randr, render, shape, shm, sync, xfixes, xkb): sul primo Ubuntu di prova di
 # GitHub mancava libxcb-xkb e Qt non partiva («xcb-cursor0 is needed», messaggio di Qt che non dice quale manca).
+# 0.20.5: libxkbcommon-x11 usa strutture interne di libxkbcommon e deve venire dalla stessa versione: con la x11 di
+# Ubuntu 22.04 (1.4) e la libxkbcommon di sistema (Arch, 1.13) il programma andava in crash (SEGV in
+# xkb_state_update_mask) alla prima pressione di un tasto/avvio. Si mettono nell'AppImage entrambe.
 # Resta del sistema solo libxcb.so.1 (con libX11), come fanno gli strumenti AppImage.
 XCB_EXTRA = ["libxcb-cursor.so.0", "libxcb-icccm.so.4", "libxcb-image.so.0", "libxcb-keysyms.so.1",
              "libxcb-render-util.so.0", "libxcb-util.so.1", "libxkbcommon-x11.so.0",
+             "libxkbcommon.so.0",  # 0.20.5: sempre in coppia con libxkbcommon-x11 (stessa versione, vedi sotto)
              "libxcb-randr.so.0", "libxcb-render.so.0", "libxcb-shape.so.0", "libxcb-shm.so.0", "libxcb-sync.so.1",
              "libxcb-xfixes.so.0", "libxcb-xkb.so.1"]
 LIB_DIRS = ["/usr/lib/x86_64-linux-gnu", "/usr/lib64", "/usr/lib", "/lib/x86_64-linux-gnu"]
@@ -101,7 +105,7 @@ def xcb_outside(plugin, appdir):
     bad = []
     for line in out.splitlines():
         parts = line.split()
-        if not parts or not parts[0].startswith(("libxcb", "libxkbcommon-x11")) or parts[0] == "libxcb.so.1":
+        if not parts or not parts[0].startswith(("libxcb", "libxkbcommon")) or parts[0] == "libxcb.so.1":
             continue
         where = parts[2] if len(parts) > 2 and parts[1] == "=>" else "?"
         if not os.path.realpath(where).startswith(os.path.realpath(appdir) + os.sep):
